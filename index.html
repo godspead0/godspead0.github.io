@@ -643,46 +643,6 @@
             });
         });
         
-        // 活跃度图表
-        const ctx = document.getElementById('activityChart').getContext('2d');
-        new Chart(ctx, {
-            type: 'line',
-            data: {
-                labels: ['1月', '2月', '3月', '4月', '5月', '6月'],
-                datasets: [{
-                    label: '笔记数量',
-                    data: [3, 5, 4, 7, 6, 8],
-                    borderColor: '#165DFF',
-                    backgroundColor: 'rgba(22, 93, 255, 0.1)',
-                    tension: 0.4,
-                    fill: true
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: {
-                    legend: {
-                        display: false
-                    }
-                },
-                scales: {
-                    y: {
-                        beginAtZero: true,
-                        grid: {
-                            display: true,
-                            color: 'rgba(0, 0, 0, 0.05)'
-                        }
-                    },
-                    x: {
-                        grid: {
-                            display: false
-                        }
-                    }
-                }
-            }
-        });
-        
         // 平滑滚动
         document.querySelectorAll('a[href^="#"]').forEach(anchor => {
             anchor.addEventListener('click', function (e) {
