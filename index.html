@@ -8,8 +8,8 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- 引入 Font Awesome -->
     <link href="https://cdn.jsdelivr.net/npm/font-awesome@4.7.0/css/font-awesome.min.css" rel="stylesheet">
-    <!-- 引入 Chart.js -->
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.8/dist/chart.umd.min.js"></script>
+    <!-- 引入 Marked.js 用于解析Markdown -->
+    <script src="https://cdn.jsdelivr.net/npm/marked@4.0.2/marked.min.js"></script>
     <!-- 配置 Tailwind -->
     <script>
         tailwind.config = {
@@ -26,6 +26,13 @@
                             500: '#4E5969',
                             600: '#272E3B',
                             700: '#1D2129',
+                        },
+                        contribution: {
+                            0: '#EBEDF0',
+                            1: '#9BE9A8',
+                            2: '#40C463',
+                            3: '#30A14E',
+                            4: '#216E39'
                         }
                     },
                     fontFamily: {
@@ -54,6 +61,20 @@
             }
             .bg-gradient {
                 background: linear-gradient(135deg, #165DFF 0%, #0A337F 100%);
+            }
+            .contribution-cell {
+                width: 11px;
+                height: 11px;
+                transition: transform 0.2s;
+            }
+            .contribution-cell:hover {
+                transform: scale(1.5);
+            }
+            .contribution-weekday {
+                font-size: 10px;
+                color: #86909C;
+                width: 11px;
+                text-align: center;
             }
         }
     </style>
@@ -91,6 +112,11 @@
                 </button>
                 <button class="p-2 rounded-full hover:bg-neutral-100 transition-colors" id="themeToggle">
                     <i class="fa fa-moon-o text-neutral-500"></i>
+                </button>
+                <!-- 上传笔记按钮 -->
+                <button id="uploadNoteBtn" class="hidden md:flex items-center space-x-1 bg-primary text-white px-3 py-1.5 rounded-lg hover:bg-primary/90 transition-colors">
+                    <i class="fa fa-upload"></i>
+                    <span>上传笔记</span>
                 </button>
                 <div class="relative group">
                     <button class="flex items-center space-x-1 p-1 rounded-full hover:bg-neutral-100 transition-colors">
@@ -141,8 +167,8 @@
                         这是你的个人笔记空间，在这里整理你的学习心得、技术笔记和创意想法。
                     </p>
                     <div class="flex flex-wrap gap-4">
-                        <button class="bg-white text-primary hover:bg-neutral-100 px-6 py-3 rounded-lg font-medium shadow-lg hover:shadow-xl transition-all flex items-center">
-                            <i class="fa fa-plus mr-2"></i>新建笔记
+                        <button id="mobileUploadNoteBtn" class="flex items-center bg-white text-primary hover:bg-neutral-100 px-6 py-3 rounded-lg font-medium shadow-lg hover:shadow-xl transition-all">
+                            <i class="fa fa-plus mr-2"></i>上传笔记
                         </button>
                         <button class="bg-transparent border-2 border-white/80 text-white hover:bg-white/10 px-6 py-3 rounded-lg font-medium transition-all flex items-center">
                             <i class="fa fa-folder-open mr-2"></i>浏览分类
@@ -152,60 +178,112 @@
             </div>
         </section>
 
-        <!-- 统计卡片 -->
+        <!-- 统计卡片和贡献图 -->
         <section class="container mx-auto px-4 -mt-8 relative z-10">
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div class="bg-white rounded-xl shadow-md p-5 card-hover">
-                    <div class="flex justify-between items-start">
-                        <div>
-                            <p class="text-neutral-400 text-sm">总笔记数</p>
-                            <h3 class="text-3xl font-bold mt-1 text-neutral-700">42</h3>
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                <!-- 统计卡片区域 -->
+                <div class="lg:col-span-1 grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div class="bg-white rounded-xl shadow-md p-5 card-hover">
+                        <div class="flex justify-between items-start">
+                            <div>
+                                <p class="text-neutral-400 text-sm">总笔记数</p>
+                                <h3 class="text-3xl font-bold mt-1 text-neutral-700" id="totalNotesCount">42</h3>
+                            </div>
+                            <div class="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center text-primary">
+                                <i class="fa fa-file-text-o text-xl"></i>
+                            </div>
                         </div>
-                        <div class="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center text-primary">
-                            <i class="fa fa-file-text-o text-xl"></i>
+                        <div class="mt-4 flex items-center text-sm">
+                            <span class="text-green-500 flex items-center">
+                                <i class="fa fa-arrow-up mr-1"></i>12%
+                            </span>
+                            <span class="text-neutral-400 ml-2">较上月</span>
                         </div>
                     </div>
-                    <div class="mt-4 flex items-center text-sm">
-                        <span class="text-green-500 flex items-center">
-                            <i class="fa fa-arrow-up mr-1"></i>12%
-                        </span>
-                        <span class="text-neutral-400 ml-2">较上月</span>
+                    
+                    <div class="bg-white rounded-xl shadow-md p-5 card-hover">
+                        <div class="flex justify-between items-start">
+                            <div>
+                                <p class="text-neutral-400 text-sm">分类数</p>
+                                <h3 class="text-3xl font-bold mt-1 text-neutral-700">8</h3>
+                            </div>
+                            <div class="w-12 h-12 rounded-full bg-secondary/10 flex items-center justify-center text-secondary">
+                                <i class="fa fa-tags text-xl"></i>
+                            </div>
+                        </div>
+                        <div class="mt-4 flex items-center text-sm">
+                            <span class="text-green-500 flex items-center">
+                                <i class="fa fa-arrow-up mr-1"></i>2
+                            </span>
+                            <span class="text-neutral-400 ml-2">新增分类</span>
+                        </div>
+                    </div>
+                    
+                    <div class="bg-white rounded-xl shadow-md p-5 card-hover">
+                        <div class="flex justify-between items-start">
+                            <div>
+                                <p class="text-neutral-400 text-sm">本月新增</p>
+                                <h3 class="text-3xl font-bold mt-1 text-neutral-700" id="monthlyNotesCount">6</h3>
+                            </div>
+                            <div class="w-12 h-12 rounded-full bg-green-100 flex items-center justify-center text-green-500">
+                                <i class="fa fa-calendar-plus-o text-xl"></i>
+                            </div>
+                        </div>
+                        <div class="mt-4 flex items-center text-sm">
+                            <span class="text-red-500 flex items-center">
+                                <i class="fa fa-arrow-down mr-1"></i>1
+                            </span>
+                            <span class="text-neutral-400 ml-2">较上月</span>
+                        </div>
                     </div>
                 </div>
                 
-                <div class="bg-white rounded-xl shadow-md p-5 card-hover">
-                    <div class="flex justify-between items-start">
-                        <div>
-                            <p class="text-neutral-400 text-sm">分类数</p>
-                            <h3 class="text-3xl font-bold mt-1 text-neutral-700">8</h3>
-                        </div>
-                        <div class="w-12 h-12 rounded-full bg-secondary/10 flex items-center justify-center text-secondary">
-                            <i class="fa fa-tags text-xl"></i>
+                <!-- 六行多列的贡献图 -->
+                <div class="lg:col-span-2 bg-white rounded-xl shadow-md p-5">
+                    <div class="flex justify-between items-center mb-6">
+                        <h3 class="font-bold text-neutral-700">笔记提交记录</h3>
+                        <div class="text-sm text-neutral-500">
+                            <span id="contributionRange">过去6个月</span>
                         </div>
                     </div>
-                    <div class="mt-4 flex items-center text-sm">
-                        <span class="text-green-500 flex items-center">
-                            <i class="fa fa-arrow-up mr-1"></i>2
-                        </span>
-                        <span class="text-neutral-400 ml-2">新增分类</span>
-                    </div>
-                </div>
-                
-                <div class="bg-white rounded-xl shadow-md p-5 card-hover">
-                    <div class="flex justify-between items-start">
-                        <div>
-                            <p class="text-neutral-400 text-sm">本月新增</p>
-                            <h3 class="text-3xl font-bold mt-1 text-neutral-700">6</h3>
+                    
+                    <!-- 六行布局的贡献图 -->
+                    <div class="flex">
+                        <!-- 星期几标签（6行） -->
+                        <div class="flex flex-col mr-2">
+                            <div class="contribution-weekday mt-2 mb-1">一</div>
+                            <div class="contribution-weekday mt-3 mb-1">二</div>
+                            <div class="contribution-weekday mt-3 mb-1">三</div>
+                            <div class="contribution-weekday mt-3 mb-1">四</div>
+                            <div class="contribution-weekday mt-3 mb-1">五</div>
+                            <div class="contribution-weekday mt-3 mb-1">六</div>
                         </div>
-                        <div class="w-12 h-12 rounded-full bg-green-100 flex items-center justify-center text-green-500">
-                            <i class="fa fa-calendar-plus-o text-xl"></i>
-                        </div>
+                        
+                        <!-- 贡献图网格 - 六行多列 -->
+                        <div id="contributionGrid" class="grid grid-cols-26 gap-1"></div>
                     </div>
-                    <div class="mt-4 flex items-center text-sm">
-                        <span class="text-red-500 flex items-center">
-                            <i class="fa fa-arrow-down mr-1"></i>1
-                        </span>
-                        <span class="text-neutral-400 ml-2">较上月</span>
+                    
+                    <!-- 月份标签 -->
+                    <div class="flex justify-between text-xs text-neutral-500 mt-3 px-8">
+                        <span>5月</span>
+                        <span>6月</span>
+                        <span>7月</span>
+                        <span>8月</span>
+                        <span>9月</span>
+                        <span>10月</span>
+                    </div>
+                    
+                    <!-- 图例 -->
+                    <div class="flex justify-center items-center mt-4 text-xs text-neutral-500 space-x-4">
+                        <span>较少</span>
+                        <div class="flex">
+                            <div class="contribution-cell bg-contribution-0"></div>
+                            <div class="contribution-cell bg-contribution-1"></div>
+                            <div class="contribution-cell bg-contribution-2"></div>
+                            <div class="contribution-cell bg-contribution-3"></div>
+                            <div class="contribution-cell bg-contribution-4"></div>
+                        </div>
+                        <span>较多</span>
                     </div>
                 </div>
             </div>
@@ -280,11 +358,6 @@
                                 </a>
                             </li>
                         </ul>
-                        
-                        <div class="mt-8 pt-6 border-t border-neutral-200">
-                            <h3 class="text-lg font-bold text-neutral-700 mb-4">笔记活跃度</h3>
-                            <canvas id="activityChart" height="180"></canvas>
-                        </div>
                     </div>
                 </div>
                 
@@ -325,7 +398,7 @@
                     </div>
                     
                     <!-- 笔记卡片网格 -->
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6" id="notesGrid">
                         <!-- 笔记卡片 1 -->
                         <div class="bg-white rounded-xl shadow-sm overflow-hidden card-hover border border-neutral-200">
                             <div class="h-40 overflow-hidden">
@@ -393,142 +466,6 @@
                                 </div>
                             </div>
                         </div>
-                        
-                        <!-- 笔记卡片 3 -->
-                        <div class="bg-white rounded-xl shadow-sm overflow-hidden card-hover border border-neutral-200">
-                            <div class="h-40 overflow-hidden">
-                                <img src="https://picsum.photos/id/180/600/400" alt="React Hooks笔记封面" class="w-full h-full object-cover transition-transform duration-500 hover:scale-110">
-                            </div>
-                            <div class="p-5">
-                                <div class="flex items-center mb-3">
-                                    <span class="bg-blue-400/20 text-blue-500 text-xs px-2 py-1 rounded-full">React</span>
-                                    <span class="ml-auto text-neutral-400 text-sm flex items-center">
-                                        <i class="fa fa-calendar-o mr-1"></i> 2023-05-05
-                                    </span>
-                                </div>
-                                <h3 class="font-bold text-lg mb-2 line-clamp-2 hover:text-primary transition-colors">
-                                    <a href="#">React Hooks完全指南：从基础到高级用法</a>
-                                </h3>
-                                <p class="text-neutral-500 text-sm mb-4 line-clamp-2">
-                                    全面介绍React Hooks的使用方法，包括useState、useEffect、useContext等常用钩子，以及自定义钩子的创建。
-                                </p>
-                                <div class="flex justify-between items-center">
-                                    <div class="flex items-center space-x-3">
-                                        <span class="text-neutral-400 text-sm flex items-center">
-                                            <i class="fa fa-eye mr-1"></i> 186
-                                        </span>
-                                        <span class="text-neutral-400 text-sm flex items-center">
-                                            <i class="fa fa-comment-o mr-1"></i> 9
-                                        </span>
-                                    </div>
-                                    <button class="text-neutral-400 hover:text-neutral-600 transition-colors">
-                                        <i class="fa fa-bookmark-o"></i>
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                        
-                        <!-- 笔记卡片 4 -->
-                        <div class="bg-white rounded-xl shadow-sm overflow-hidden card-hover border border-neutral-200">
-                            <div class="h-40 overflow-hidden">
-                                <img src="https://picsum.photos/id/96/600/400" alt="Docker容器化笔记封面" class="w-full h-full object-cover transition-transform duration-500 hover:scale-110">
-                            </div>
-                            <div class="p-5">
-                                <div class="flex items-center mb-3">
-                                    <span class="bg-blue-300/20 text-blue-600 text-xs px-2 py-1 rounded-full">Docker</span>
-                                    <span class="ml-auto text-neutral-400 text-sm flex items-center">
-                                        <i class="fa fa-calendar-o mr-1"></i> 2023-04-28
-                                    </span>
-                                </div>
-                                <h3 class="font-bold text-lg mb-2 line-clamp-2 hover:text-primary transition-colors">
-                                    <a href="#">Docker容器化部署最佳实践</a>
-                                </h3>
-                                <p class="text-neutral-500 text-sm mb-4 line-clamp-2">
-                                    分享Docker容器化部署的最佳实践，包括镜像优化、容器编排、数据持久化和网络配置等关键知识点。
-                                </p>
-                                <div class="flex justify-between items-center">
-                                    <div class="flex items-center space-x-3">
-                                        <span class="text-neutral-400 text-sm flex items-center">
-                                            <i class="fa fa-eye mr-1"></i> 156
-                                        </span>
-                                        <span class="text-neutral-400 text-sm flex items-center">
-                                            <i class="fa fa-comment-o mr-1"></i> 6
-                                        </span>
-                                    </div>
-                                    <button class="text-neutral-400 hover:text-neutral-600 transition-colors">
-                                        <i class="fa fa-bookmark-o"></i>
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                        
-                        <!-- 笔记卡片 5 -->
-                        <div class="bg-white rounded-xl shadow-sm overflow-hidden card-hover border border-neutral-200">
-                            <div class="h-40 overflow-hidden">
-                                <img src="https://picsum.photos/id/119/600/400" alt="算法与数据结构笔记封面" class="w-full h-full object-cover transition-transform duration-500 hover:scale-110">
-                            </div>
-                            <div class="p-5">
-                                <div class="flex items-center mb-3">
-                                    <span class="bg-purple-100 text-purple-600 text-xs px-2 py-1 rounded-full">算法</span>
-                                    <span class="ml-auto text-neutral-400 text-sm flex items-center">
-                                        <i class="fa fa-calendar-o mr-1"></i> 2023-04-20
-                                    </span>
-                                </div>
-                                <h3 class="font-bold text-lg mb-2 line-clamp-2 hover:text-primary transition-colors">
-                                    <a href="#">常见排序算法的时间复杂度分析与实现</a>
-                                </h3>
-                                <p class="text-neutral-500 text-sm mb-4 line-clamp-2">
-                                    详细讲解冒泡排序、选择排序、插入排序、快速排序等常见排序算法的原理、实现和时间复杂度分析。
-                                </p>
-                                <div class="flex justify-between items-center">
-                                    <div class="flex items-center space-x-3">
-                                        <span class="text-neutral-400 text-sm flex items-center">
-                                            <i class="fa fa-eye mr-1"></i> 203
-                                        </span>
-                                        <span class="text-neutral-400 text-sm flex items-center">
-                                            <i class="fa fa-comment-o mr-1"></i> 15
-                                        </span>
-                                    </div>
-                                    <button class="text-primary hover:text-primary/80 transition-colors">
-                                        <i class="fa fa-bookmark"></i>
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                        
-                        <!-- 笔记卡片 6 -->
-                        <div class="bg-white rounded-xl shadow-sm overflow-hidden card-hover border border-neutral-200">
-                            <div class="h-40 overflow-hidden">
-                                <img src="https://picsum.photos/id/2/600/400" alt="CSS布局技巧笔记封面" class="w-full h-full object-cover transition-transform duration-500 hover:scale-110">
-                            </div>
-                            <div class="p-5">
-                                <div class="flex items-center mb-3">
-                                    <span class="bg-pink-100 text-pink-600 text-xs px-2 py-1 rounded-full">CSS</span>
-                                    <span class="ml-auto text-neutral-400 text-sm flex items-center">
-                                        <i class="fa fa-calendar-o mr-1"></i> 2023-04-15
-                                    </span>
-                                </div>
-                                <h3 class="font-bold text-lg mb-2 line-clamp-2 hover:text-primary transition-colors">
-                                    <a href="#">现代CSS布局技巧：Flexbox与Grid完全指南</a>
-                                </h3>
-                                <p class="text-neutral-500 text-sm mb-4 line-clamp-2">
-                                    全面介绍Flexbox和Grid两种现代CSS布局方式的使用方法和技巧，帮助你轻松实现各种复杂布局。
-                                </p>
-                                <div class="flex justify-between items-center">
-                                    <div class="flex items-center space-x-3">
-                                        <span class="text-neutral-400 text-sm flex items-center">
-                                            <i class="fa fa-eye mr-1"></i> 178
-                                        </span>
-                                        <span class="text-neutral-400 text-sm flex items-center">
-                                            <i class="fa fa-comment-o mr-1"></i> 10
-                                        </span>
-                                    </div>
-                                    <button class="text-neutral-400 hover:text-neutral-600 transition-colors">
-                                        <i class="fa fa-bookmark-o"></i>
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
                     </div>
                     
                     <!-- 分页 -->
@@ -583,6 +520,72 @@
         </div>
     </footer>
 
+    <!-- 上传笔记模态框 -->
+    <div id="uploadModal" class="fixed inset-0 bg-black/50 z-50 flex items-center justify-center opacity-0 invisible transition-all duration-300">
+        <div class="bg-white rounded-xl shadow-xl w-full max-w-lg mx-4 transform transition-transform duration-300 scale-95">
+            <div class="p-6 border-b border-neutral-200">
+                <div class="flex justify-between items-center">
+                    <h3 class="text-xl font-bold text-neutral-700">上传笔记</h3>
+                    <button id="closeModalBtn" class="text-neutral-400 hover:text-neutral-600 transition-colors">
+                        <i class="fa fa-times text-xl"></i>
+                    </button>
+                </div>
+            </div>
+            <div class="p-6">
+                <form id="noteUploadForm">
+                    <div class="mb-4">
+                        <label for="noteTitle" class="block text-sm font-medium text-neutral-700 mb-1">笔记标题</label>
+                        <input type="text" id="noteTitle" class="w-full px-4 py-2 border border-neutral-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all" placeholder="输入笔记标题">
+                    </div>
+                    
+                    <div class="mb-4">
+                        <label for="noteCategory" class="block text-sm font-medium text-neutral-700 mb-1">分类</label>
+                        <select id="noteCategory" class="w-full px-4 py-2 border border-neutral-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all">
+                            <option value="编程开发">编程开发</option>
+                            <option value="运维部署">运维部署</option>
+                            <option value="数据库">数据库</option>
+                            <option value="设计">设计</option>
+                            <option value="读书笔记">读书笔记</option>
+                            <option value="创意灵感">创意灵感</option>
+                        </select>
+                    </div>
+                    
+                    <div class="mb-4">
+                        <label for="noteTag" class="block text-sm font-medium text-neutral-700 mb-1">标签</label>
+                        <input type="text" id="noteTag" class="w-full px-4 py-2 border border-neutral-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all" placeholder="输入标签，多个标签用逗号分隔">
+                    </div>
+                    
+                    <div class="mb-4">
+                        <label for="noteFile" class="block text-sm font-medium text-neutral-700 mb-1">选择Markdown文件</label>
+                        <div class="flex items-center justify-center w-full">
+                            <label for="noteFile" class="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed border-neutral-300 rounded-lg cursor-pointer bg-neutral-50 hover:bg-neutral-100 transition-colors">
+                                <div class="flex flex-col items-center justify-center pt-5 pb-6">
+                                    <i class="fa fa-cloud-upload text-3xl text-neutral-400 mb-2"></i>
+                                    <p class="mb-1 text-sm text-neutral-500"><span class="font-semibold">点击上传</span> 或拖放文件</p>
+                                    <p class="text-xs text-neutral-400">支持 .md 格式文件</p>
+                                </div>
+                                <input id="noteFile" type="file" accept=".md" class="hidden" />
+                            </label>
+                        </div>
+                        <div id="filePreview" class="mt-2 text-sm text-neutral-600 hidden"></div>
+                    </div>
+                    
+                    <div class="mb-4">
+                        <label class="block text-sm font-medium text-neutral-700 mb-1">笔记预览</label>
+                        <div id="notePreview" class="w-full p-4 border border-neutral-300 rounded-lg bg-neutral-50 min-h-[100px] text-sm">
+                            上传文件后将显示预览
+                        </div>
+                    </div>
+                    
+                    <div class="flex justify-end space-x-3 mt-6">
+                        <button type="button" id="cancelUploadBtn" class="px-5 py-2 border border-neutral-300 rounded-lg text-neutral-700 hover:bg-neutral-100 transition-colors">取消</button>
+                        <button type="submit" class="px-5 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors">提交笔记</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
     <!-- 返回顶部按钮 -->
     <button id="backToTop" class="fixed bottom-6 right-6 w-12 h-12 bg-primary text-white rounded-full shadow-lg flex items-center justify-center opacity-0 invisible transition-all duration-300 hover:bg-primary/90">
         <i class="fa fa-arrow-up"></i>
@@ -590,68 +593,336 @@
 
     <!-- JavaScript -->
     <script>
-        // 导航栏滚动效果
-        const navbar = document.getElementById('navbar');
-        window.addEventListener('scroll', () => {
-            if (window.scrollY > 50) {
-                navbar.classList.add('py-2', 'shadow');
-                navbar.classList.remove('py-3');
-            } else {
-                navbar.classList.add('py-3');
-                navbar.classList.remove('py-2', 'shadow');
-            }
-        });
-        
-        // 移动端搜索框切换
-        const searchToggle = document.getElementById('searchToggle');
-        const mobileSearch = document.getElementById('mobileSearch');
-        searchToggle.addEventListener('click', () => {
-            mobileSearch.classList.toggle('hidden');
-        });
-        
-        // 主题切换按钮
-        const themeToggle = document.getElementById('themeToggle');
-        themeToggle.addEventListener('click', () => {
-            const icon = themeToggle.querySelector('i');
-            if (icon.classList.contains('fa-moon-o')) {
-                icon.classList.remove('fa-moon-o');
-                icon.classList.add('fa-sun-o');
-                // 这里可以添加暗色模式切换逻辑
-            } else {
-                icon.classList.remove('fa-sun-o');
-                icon.classList.add('fa-moon-o');
-                // 这里可以添加亮色模式切换逻辑
-            }
-        });
-        
-        // 返回顶部按钮
-        const backToTop = document.getElementById('backToTop');
-        window.addEventListener('scroll', () => {
-            if (window.scrollY > 300) {
-                backToTop.classList.remove('opacity-0', 'invisible');
-                backToTop.classList.add('opacity-100', 'visible');
-            } else {
-                backToTop.classList.add('opacity-0', 'invisible');
-                backToTop.classList.remove('opacity-100', 'visible');
-            }
-        });
-        
-        backToTop.addEventListener('click', () => {
-            window.scrollTo({
-                top: 0,
-                behavior: 'smooth'
+        // 页面加载完成后执行
+        document.addEventListener('DOMContentLoaded', function() {
+            // 导航栏滚动效果
+            const navbar = document.getElementById('navbar');
+            window.addEventListener('scroll', () => {
+                if (window.scrollY > 50) {
+                    navbar.classList.add('py-2', 'shadow');
+                    navbar.classList.remove('py-3');
+                } else {
+                    navbar.classList.add('py-3');
+                    navbar.classList.remove('py-2', 'shadow');
+                }
             });
-        });
-        
-        // 平滑滚动
-        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
-            anchor.addEventListener('click', function (e) {
-                e.preventDefault();
-                document.querySelector(this.getAttribute('href')).scrollIntoView({
+            
+            // 移动端搜索框切换
+            const searchToggle = document.getElementById('searchToggle');
+            const mobileSearch = document.getElementById('mobileSearch');
+            searchToggle.addEventListener('click', () => {
+                mobileSearch.classList.toggle('hidden');
+            });
+            
+            // 主题切换按钮
+            const themeToggle = document.getElementById('themeToggle');
+            themeToggle.addEventListener('click', () => {
+                const icon = themeToggle.querySelector('i');
+                if (icon.classList.contains('fa-moon-o')) {
+                    icon.classList.remove('fa-moon-o');
+                    icon.classList.add('fa-sun-o');
+                    // 暗色模式切换逻辑
+                    document.body.classList.add('dark-mode');
+                } else {
+                    icon.classList.remove('fa-sun-o');
+                    icon.classList.add('fa-moon-o');
+                    // 亮色模式切换逻辑
+                    document.body.classList.remove('dark-mode');
+                }
+            });
+            
+            // 返回顶部按钮
+            const backToTop = document.getElementById('backToTop');
+            window.addEventListener('scroll', () => {
+                if (window.scrollY > 300) {
+                    backToTop.classList.remove('opacity-0', 'invisible');
+                    backToTop.classList.add('opacity-100', 'visible');
+                } else {
+                    backToTop.classList.add('opacity-0', 'invisible');
+                    backToTop.classList.remove('opacity-100', 'visible');
+                }
+            });
+            
+            backToTop.addEventListener('click', () => {
+                window.scrollTo({
+                    top: 0,
                     behavior: 'smooth'
                 });
             });
+            
+            // 平滑滚动
+            document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+                anchor.addEventListener('click', function (e) {
+                    e.preventDefault();
+                    document.querySelector(this.getAttribute('href')).scrollIntoView({
+                        behavior: 'smooth'
+                    });
+                });
+            });
+            
+            // 初始化六行多列的贡献图
+            initContributionGraph();
+            
+            // 上传笔记模态框控制
+            const uploadNoteBtn = document.getElementById('uploadNoteBtn');
+            const mobileUploadNoteBtn = document.getElementById('mobileUploadNoteBtn');
+            const uploadModal = document.getElementById('uploadModal');
+            const closeModalBtn = document.getElementById('closeModalBtn');
+            const cancelUploadBtn = document.getElementById('cancelUploadBtn');
+            
+            function openModal() {
+                uploadModal.classList.remove('opacity-0', 'invisible');
+                uploadModal.classList.add('opacity-100', 'visible');
+                uploadModal.querySelector('div').classList.remove('scale-95');
+                uploadModal.querySelector('div').classList.add('scale-100');
+                document.body.style.overflow = 'hidden';
+            }
+            
+            function closeModal() {
+                uploadModal.classList.add('opacity-0', 'invisible');
+                uploadModal.classList.remove('opacity-100', 'visible');
+                uploadModal.querySelector('div').classList.add('scale-95');
+                uploadModal.querySelector('div').classList.remove('scale-100');
+                document.body.style.overflow = '';
+            }
+            
+            uploadNoteBtn.addEventListener('click', openModal);
+            mobileUploadNoteBtn.addEventListener('click', openModal);
+            closeModalBtn.addEventListener('click', closeModal);
+            cancelUploadBtn.addEventListener('click', closeModal);
+            
+            // 点击模态框外部关闭
+            uploadModal.addEventListener('click', function(e) {
+                if (e.target === uploadModal) {
+                    closeModal();
+                }
+            });
+            
+            // 文件选择和预览
+            const noteFile = document.getElementById('noteFile');
+            const filePreview = document.getElementById('filePreview');
+            const notePreview = document.getElementById('notePreview');
+            
+            noteFile.addEventListener('change', function(e) {
+                const file = e.target.files[0];
+                if (file) {
+                    // 显示文件名
+                    filePreview.textContent = `已选择: ${file.name}`;
+                    filePreview.classList.remove('hidden');
+                    
+                    // 读取文件内容并预览
+                    const reader = new FileReader();
+                    reader.onload = function(e) {
+                        const content = e.target.result;
+                        // 使用marked.js将Markdown转换为HTML
+                        notePreview.innerHTML = marked.parse(content.substring(0, 500)) + '<p class="text-neutral-400">... 预览已截断</p>';
+                    };
+                    reader.readAsText(file);
+                } else {
+                    filePreview.classList.add('hidden');
+                    notePreview.innerHTML = '上传文件后将显示预览';
+                }
+            });
+            
+            // 表单提交处理
+            const noteUploadForm = document.getElementById('noteUploadForm');
+            noteUploadForm.addEventListener('submit', function(e) {
+                e.preventDefault();
+                
+                const title = document.getElementById('noteTitle').value;
+                const category = document.getElementById('noteCategory').value;
+                const tag = document.getElementById('noteTag').value;
+                const file = noteFile.files[0];
+                
+                if (!title || !file) {
+                    alert('请填写标题并选择文件');
+                    return;
+                }
+                
+                // 创建新笔记卡片
+                createNewNoteCard(title, category, tag, file.name);
+                
+                // 更新贡献图
+                updateContributionGraph();
+                
+                // 更新统计数字
+                updateNoteCounts();
+                
+                // 关闭模态框并重置表单
+                closeModal();
+                noteUploadForm.reset();
+                filePreview.classList.add('hidden');
+                notePreview.innerHTML = '上传文件后将显示预览';
+                
+                // 显示成功提示
+                alert('笔记上传成功！');
+            });
         });
+        
+        // 初始化六行多列的贡献图（显示过去6个月）
+        function initContributionGraph() {
+            const contributionGrid = document.getElementById('contributionGrid');
+            const today = new Date();
+            
+            // 计算6个月前的日期
+            const sixMonthsAgo = new Date();
+            sixMonthsAgo.setMonth(today.getMonth() - 6);
+            
+            // 从本地存储获取贡献数据，如无则初始化
+            let contributions = JSON.parse(localStorage.getItem('noteContributions')) || {};
+            
+            // 六行多列布局参数（6行×26列 = 156天，约6个月）
+            const rows = 6;         // 六行
+            const cols = 26;        // 26列
+            const totalDays = rows * cols;  // 156天
+            
+            let currentDate = new Date(sixMonthsAgo);
+            
+            // 调整起始日期为周一，使六行对应周一至周六
+            const dayOfWeek = currentDate.getDay() || 7; // 将周日的0转换为7
+            if (dayOfWeek > 1) {
+                currentDate.setDate(currentDate.getDate() - (dayOfWeek - 1));
+            }
+            
+            // 生成贡献图网格 - 六行多列布局
+            for (let day = 0; day < totalDays; day++) {
+                const dateStr = currentDate.toISOString().split('T')[0];
+                
+                // 如果没有该日期的数据，初始化为0
+                if (!contributions[dateStr]) {
+                    contributions[dateStr] = 0;
+                }
+                
+                // 确定贡献等级（0-4）
+                let level = 0;
+                if (contributions[dateStr] > 0) level = 1;
+                if (contributions[dateStr] > 1) level = 2;
+                if (contributions[dateStr] > 3) level = 3;
+                if (contributions[dateStr] > 5) level = 4;
+                
+                // 创建格子元素
+                const cell = document.createElement('div');
+                cell.className = `contribution-cell bg-contribution-${level} rounded-sm`;
+                cell.title = `${dateStr}: ${contributions[dateStr]} 篇笔记`;
+                cell.dataset.date = dateStr;
+                contributionGrid.appendChild(cell);
+                
+                // 移动到下一天
+                currentDate.setDate(currentDate.getDate() + 1);
+            }
+            
+            // 保存贡献数据
+            localStorage.setItem('noteContributions', JSON.stringify(contributions));
+        }
+        
+        // 更新贡献图（添加新提交）
+        function updateContributionGraph() {
+            const today = new Date().toISOString().split('T')[0];
+            let contributions = JSON.parse(localStorage.getItem('noteContributions')) || {};
+            
+            // 增加今天的贡献数
+            if (contributions[today]) {
+                contributions[today]++;
+            } else {
+                contributions[today] = 1;
+            }
+            
+            // 更新对应的格子
+            const cell = document.querySelector(`.contribution-cell[data-date="${today}"]`);
+            if (cell) {
+                let level = 0;
+                if (contributions[today] > 0) level = 1;
+                if (contributions[today] > 1) level = 2;
+                if (contributions[today] > 3) level = 3;
+                if (contributions[today] > 5) level = 4;
+                
+                // 移除旧的等级类
+                for (let i = 0; i <= 4; i++) {
+                    cell.classList.remove(`bg-contribution-${i}`);
+                }
+                
+                // 添加新的等级类
+                cell.classList.add(`bg-contribution-${level}`);
+                cell.title = `${today}: ${contributions[today]} 篇笔记`;
+            }
+            
+            // 保存更新后的贡献数据
+            localStorage.setItem('noteContributions', JSON.stringify(contributions));
+        }
+        
+        // 创建新笔记卡片
+        function createNewNoteCard(title, category, tag, fileName) {
+            const notesGrid = document.getElementById('notesGrid');
+            const today = new Date();
+            const dateStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+            
+            // 随机图片ID
+            const imageId = Math.floor(Math.random() * 200);
+            
+            // 创建卡片HTML
+            const cardHtml = `
+                <div class="bg-white rounded-xl shadow-sm overflow-hidden card-hover border border-neutral-200 animate-fade-in">
+                    <div class="h-40 overflow-hidden">
+                        <img src="https://picsum.photos/id/${imageId}/600/400" alt="${title}封面" class="w-full h-full object-cover transition-transform duration-500 hover:scale-110">
+                    </div>
+                    <div class="p-5">
+                        <div class="flex items-center mb-3">
+                            <span class="bg-blue-100 text-blue-600 text-xs px-2 py-1 rounded-full">${tag.split(',')[0] || category}</span>
+                            <span class="ml-auto text-neutral-400 text-sm flex items-center">
+                                <i class="fa fa-calendar-o mr-1"></i> ${dateStr}
+                            </span>
+                        </div>
+                        <h3 class="font-bold text-lg mb-2 line-clamp-2 hover:text-primary transition-colors">
+                            <a href="#">${title}</a>
+                        </h3>
+                        <p class="text-neutral-500 text-sm mb-4 line-clamp-2">
+                            从文件 "${fileName}" 导入的笔记内容，点击查看详情。
+                        </p>
+                        <div class="flex justify-between items-center">
+                            <div class="flex items-center space-x-3">
+                                <span class="text-neutral-400 text-sm flex items-center">
+                                    <i class="fa fa-eye mr-1"></i> 0
+                                </span>
+                                <span class="text-neutral-400 text-sm flex items-center">
+                                    <i class="fa fa-comment-o mr-1"></i> 0
+                                </span>
+                            </div>
+                            <button class="text-neutral-400 hover:text-neutral-600 transition-colors">
+                                <i class="fa fa-bookmark-o"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            // 将新卡片添加到网格开头
+            notesGrid.insertAdjacentHTML('afterbegin', cardHtml);
+            
+            // 添加淡入动画
+            const newCard = notesGrid.firstElementChild;
+            newCard.style.opacity = '0';
+            newCard.style.transform = 'translateY(20px)';
+            newCard.style.transition = 'opacity 0.5s ease, transform 0.5s ease';
+            
+            setTimeout(() => {
+                newCard.style.opacity = '1';
+                newCard.style.transform = 'translateY(0)';
+            }, 10);
+        }
+        
+        // 更新笔记统计数字
+        function updateNoteCounts() {
+            const totalNotesCount = document.getElementById('totalNotesCount');
+            const monthlyNotesCount = document.getElementById('monthlyNotesCount');
+            
+            // 增加总笔记数
+            const currentTotal = parseInt(totalNotesCount.textContent);
+            totalNotesCount.textContent = currentTotal + 1;
+            
+            // 增加本月笔记数
+            const currentMonthly = parseInt(monthlyNotesCount.textContent);
+            monthlyNotesCount.textContent = currentMonthly + 1;
+        }
     </script>
 </body>
 </html>
