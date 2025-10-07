@@ -1,1 +1,697 @@
-<h1>welcome!</h1>
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>我的笔记 | GitHub Pages</title>
+    <!-- 引入 Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- 引入 Font Awesome -->
+    <link href="https://cdn.jsdelivr.net/npm/font-awesome@4.7.0/css/font-awesome.min.css" rel="stylesheet">
+    <!-- 引入 Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.8/dist/chart.umd.min.js"></script>
+    <!-- 配置 Tailwind -->
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#165DFF',
+                        secondary: '#FF7D00',
+                        neutral: {
+                            100: '#F5F7FA',
+                            200: '#E5E6EB',
+                            300: '#C9CDD4',
+                            400: '#86909C',
+                            500: '#4E5969',
+                            600: '#272E3B',
+                            700: '#1D2129',
+                        }
+                    },
+                    fontFamily: {
+                        inter: ['Inter', 'system-ui', 'sans-serif'],
+                    },
+                }
+            }
+        }
+    </script>
+    <style type="text/tailwindcss">
+        @layer utilities {
+            .content-auto {
+                content-visibility: auto;
+            }
+            .text-shadow {
+                text-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            }
+            .card-hover {
+                transition: all 0.3s ease;
+            }
+            .card-hover:hover {
+                transform: translateY(-5px);
+            }
+            .scrollbar-hide::-webkit-scrollbar {
+                display: none;
+            }
+            .bg-gradient {
+                background: linear-gradient(135deg, #165DFF 0%, #0A337F 100%);
+            }
+        }
+    </style>
+</head>
+<body class="font-inter bg-neutral-100 text-neutral-700 min-h-screen flex flex-col">
+    <!-- 导航栏 -->
+    <header id="navbar" class="fixed w-full top-0 z-50 transition-all duration-300 bg-white/90 backdrop-blur-sm shadow-sm">
+        <div class="container mx-auto px-4 py-3 flex items-center justify-between">
+            <!-- 网站标题 -->
+            <a href="#" class="flex items-center space-x-2">
+                <i class="fa fa-book text-primary text-2xl"></i>
+                <span class="text-xl font-bold text-neutral-700">笔记空间</span>
+            </a>
+            
+            <!-- 搜索框 - 中等屏幕以上显示 -->
+            <div class="hidden md:flex items-center flex-1 max-w-xl mx-8">
+                <div class="relative w-full">
+                    <input 
+                        type="text" 
+                        placeholder="搜索笔记..." 
+                        class="w-full pl-10 pr-4 py-2 rounded-full bg-neutral-100 focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all"
+                    >
+                    <i class="fa fa-search absolute left-3 top-1/2 transform -translate-y-1/2 text-neutral-400"></i>
+                </div>
+            </div>
+            
+            <!-- 导航菜单 -->
+            <nav class="flex items-center space-x-1 md:space-x-4">
+                <button class="md:hidden p-2 rounded-full hover:bg-neutral-100 transition-colors" id="searchToggle">
+                    <i class="fa fa-search text-neutral-500"></i>
+                </button>
+                <button class="p-2 rounded-full hover:bg-neutral-100 transition-colors relative">
+                    <i class="fa fa-bell text-neutral-500"></i>
+                    <span class="absolute top-1 right-1 w-2 h-2 bg-secondary rounded-full"></span>
+                </button>
+                <button class="p-2 rounded-full hover:bg-neutral-100 transition-colors" id="themeToggle">
+                    <i class="fa fa-moon-o text-neutral-500"></i>
+                </button>
+                <div class="relative group">
+                    <button class="flex items-center space-x-1 p-1 rounded-full hover:bg-neutral-100 transition-colors">
+                        <img src="https://picsum.photos/id/1005/40/40" alt="用户头像" class="w-8 h-8 rounded-full object-cover border-2 border-white shadow-sm">
+                        <span class="hidden md:inline font-medium">用户名</span>
+                        <i class="fa fa-angle-down text-neutral-400 text-xs"></i>
+                    </button>
+                    <!-- 用户下拉菜单 -->
+                    <div class="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg py-2 z-50 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 transform group-hover:translate-y-0 translate-y-2">
+                        <a href="#" class="block px-4 py-2 text-sm hover:bg-neutral-100 transition-colors">
+                            <i class="fa fa-user mr-2 text-neutral-400"></i>个人资料
+                        </a>
+                        <a href="#" class="block px-4 py-2 text-sm hover:bg-neutral-100 transition-colors">
+                            <i class="fa fa-cog mr-2 text-neutral-400"></i>设置
+                        </a>
+                        <div class="border-t border-neutral-200 my-1"></div>
+                        <a href="#" class="block px-4 py-2 text-sm text-red-500 hover:bg-neutral-100 transition-colors">
+                            <i class="fa fa-sign-out mr-2"></i>退出登录
+                        </a>
+                    </div>
+                </div>
+            </nav>
+        </div>
+        
+        <!-- 移动端搜索框 -->
+        <div class="md:hidden px-4 pb-3 hidden" id="mobileSearch">
+            <div class="relative w-full">
+                <input 
+                    type="text" 
+                    placeholder="搜索笔记..." 
+                    class="w-full pl-10 pr-4 py-2 rounded-full bg-neutral-100 focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all"
+                >
+                <i class="fa fa-search absolute left-3 top-1/2 transform -translate-y-1/2 text-neutral-400"></i>
+            </div>
+        </div>
+    </header>
+
+    <!-- 主内容区 -->
+    <main class="flex-1 pt-16">
+        <!-- 欢迎区域 -->
+        <section class="bg-gradient text-white py-10 md:py-16">
+            <div class="container mx-auto px-4">
+                <div class="max-w-3xl">
+                    <h1 class="text-[clamp(1.8rem,4vw,2.8rem)] font-bold leading-tight text-shadow mb-4">
+                        记录学习，分享知识
+                    </h1>
+                    <p class="text-white/90 text-lg mb-6 max-w-2xl">
+                        这是你的个人笔记空间，在这里整理你的学习心得、技术笔记和创意想法。
+                    </p>
+                    <div class="flex flex-wrap gap-4">
+                        <button class="bg-white text-primary hover:bg-neutral-100 px-6 py-3 rounded-lg font-medium shadow-lg hover:shadow-xl transition-all flex items-center">
+                            <i class="fa fa-plus mr-2"></i>新建笔记
+                        </button>
+                        <button class="bg-transparent border-2 border-white/80 text-white hover:bg-white/10 px-6 py-3 rounded-lg font-medium transition-all flex items-center">
+                            <i class="fa fa-folder-open mr-2"></i>浏览分类
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 统计卡片 -->
+        <section class="container mx-auto px-4 -mt-8 relative z-10">
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div class="bg-white rounded-xl shadow-md p-5 card-hover">
+                    <div class="flex justify-between items-start">
+                        <div>
+                            <p class="text-neutral-400 text-sm">总笔记数</p>
+                            <h3 class="text-3xl font-bold mt-1 text-neutral-700">42</h3>
+                        </div>
+                        <div class="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center text-primary">
+                            <i class="fa fa-file-text-o text-xl"></i>
+                        </div>
+                    </div>
+                    <div class="mt-4 flex items-center text-sm">
+                        <span class="text-green-500 flex items-center">
+                            <i class="fa fa-arrow-up mr-1"></i>12%
+                        </span>
+                        <span class="text-neutral-400 ml-2">较上月</span>
+                    </div>
+                </div>
+                
+                <div class="bg-white rounded-xl shadow-md p-5 card-hover">
+                    <div class="flex justify-between items-start">
+                        <div>
+                            <p class="text-neutral-400 text-sm">分类数</p>
+                            <h3 class="text-3xl font-bold mt-1 text-neutral-700">8</h3>
+                        </div>
+                        <div class="w-12 h-12 rounded-full bg-secondary/10 flex items-center justify-center text-secondary">
+                            <i class="fa fa-tags text-xl"></i>
+                        </div>
+                    </div>
+                    <div class="mt-4 flex items-center text-sm">
+                        <span class="text-green-500 flex items-center">
+                            <i class="fa fa-arrow-up mr-1"></i>2
+                        </span>
+                        <span class="text-neutral-400 ml-2">新增分类</span>
+                    </div>
+                </div>
+                
+                <div class="bg-white rounded-xl shadow-md p-5 card-hover">
+                    <div class="flex justify-between items-start">
+                        <div>
+                            <p class="text-neutral-400 text-sm">本月新增</p>
+                            <h3 class="text-3xl font-bold mt-1 text-neutral-700">6</h3>
+                        </div>
+                        <div class="w-12 h-12 rounded-full bg-green-100 flex items-center justify-center text-green-500">
+                            <i class="fa fa-calendar-plus-o text-xl"></i>
+                        </div>
+                    </div>
+                    <div class="mt-4 flex items-center text-sm">
+                        <span class="text-red-500 flex items-center">
+                            <i class="fa fa-arrow-down mr-1"></i>1
+                        </span>
+                        <span class="text-neutral-400 ml-2">较上月</span>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 笔记和分类区域 -->
+        <section class="container mx-auto px-4 py-8">
+            <div class="flex flex-col lg:flex-row gap-8">
+                <!-- 左侧分类 -->
+                <div class="lg:w-1/4">
+                    <div class="bg-white rounded-xl shadow-sm p-5 sticky top-24">
+                        <div class="flex justify-between items-center mb-6">
+                            <h2 class="text-lg font-bold text-neutral-700">笔记分类</h2>
+                            <button class="text-primary hover:text-primary/80 text-sm font-medium">
+                                管理
+                            </button>
+                        </div>
+                        
+                        <ul class="space-y-1">
+                            <li>
+                                <a href="#" class="flex items-center justify-between p-3 rounded-lg bg-primary/10 text-primary font-medium">
+                                    <div class="flex items-center">
+                                        <i class="fa fa-code mr-3 w-5 text-center"></i>
+                                        <span>编程开发</span>
+                                    </div>
+                                    <span class="bg-primary/20 text-primary text-xs px-2 py-1 rounded-full">12</span>
+                                </a>
+                            </li>
+                            <li>
+                                <a href="#" class="flex items-center justify-between p-3 rounded-lg hover:bg-neutral-100 transition-colors">
+                                    <div class="flex items-center">
+                                        <i class="fa fa-terminal mr-3 w-5 text-center text-neutral-500"></i>
+                                        <span>运维部署</span>
+                                    </div>
+                                    <span class="bg-neutral-100 text-neutral-500 text-xs px-2 py-1 rounded-full">8</span>
+                                </a>
+                            </li>
+                            <li>
+                                <a href="#" class="flex items-center justify-between p-3 rounded-lg hover:bg-neutral-100 transition-colors">
+                                    <div class="flex items-center">
+                                        <i class="fa fa-database mr-3 w-5 text-center text-neutral-500"></i>
+                                        <span>数据库</span>
+                                    </div>
+                                    <span class="bg-neutral-100 text-neutral-500 text-xs px-2 py-1 rounded-full">5</span>
+                                </a>
+                            </li>
+                            <li>
+                                <a href="#" class="flex items-center justify-between p-3 rounded-lg hover:bg-neutral-100 transition-colors">
+                                    <div class="flex items-center">
+                                        <i class="fa fa-paint-brush mr-3 w-5 text-center text-neutral-500"></i>
+                                        <span>设计</span>
+                                    </div>
+                                    <span class="bg-neutral-100 text-neutral-500 text-xs px-2 py-1 rounded-full">4</span>
+                                </a>
+                            </li>
+                            <li>
+                                <a href="#" class="flex items-center justify-between p-3 rounded-lg hover:bg-neutral-100 transition-colors">
+                                    <div class="flex items-center">
+                                        <i class="fa fa-book mr-3 w-5 text-center text-neutral-500"></i>
+                                        <span>读书笔记</span>
+                                    </div>
+                                    <span class="bg-neutral-100 text-neutral-500 text-xs px-2 py-1 rounded-full">7</span>
+                                </a>
+                            </li>
+                            <li>
+                                <a href="#" class="flex items-center justify-between p-3 rounded-lg hover:bg-neutral-100 transition-colors">
+                                    <div class="flex items-center">
+                                        <i class="fa fa-lightbulb-o mr-3 w-5 text-center text-neutral-500"></i>
+                                        <span>创意灵感</span>
+                                    </div>
+                                    <span class="bg-neutral-100 text-neutral-500 text-xs px-2 py-1 rounded-full">6</span>
+                                </a>
+                            </li>
+                        </ul>
+                        
+                        <div class="mt-8 pt-6 border-t border-neutral-200">
+                            <h3 class="text-lg font-bold text-neutral-700 mb-4">笔记活跃度</h3>
+                            <canvas id="activityChart" height="180"></canvas>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- 右侧笔记列表 -->
+                <div class="lg:w-3/4">
+                    <!-- 筛选和排序 -->
+                    <div class="bg-white rounded-xl shadow-sm p-4 mb-6">
+                        <div class="flex flex-wrap justify-between items-center gap-4">
+                            <div class="flex items-center space-x-2">
+                                <h2 class="text-lg font-bold text-neutral-700">编程开发笔记</h2>
+                                <span class="bg-neutral-100 text-neutral-500 text-xs px-2 py-1 rounded-full">12篇</span>
+                            </div>
+                            
+                            <div class="flex flex-wrap items-center gap-3">
+                                <div class="flex rounded-lg overflow-hidden border border-neutral-200">
+                                    <button class="px-3 py-1.5 bg-primary text-white text-sm">最新</button>
+                                    <button class="px-3 py-1.5 text-neutral-500 hover:bg-neutral-100 text-sm transition-colors">最热</button>
+                                    <button class="px-3 py-1.5 text-neutral-500 hover:bg-neutral-100 text-sm transition-colors">最早</button>
+                                </div>
+                                
+                                <div class="relative">
+                                    <button class="flex items-center space-x-1 px-3 py-1.5 border border-neutral-200 rounded-lg text-sm text-neutral-500 hover:bg-neutral-100 transition-colors">
+                                        <i class="fa fa-filter"></i>
+                                        <span>筛选</span>
+                                    </button>
+                                </div>
+                                
+                                <div class="flex rounded-lg overflow-hidden border border-neutral-200">
+                                    <button class="p-1.5 bg-primary/10 text-primary">
+                                        <i class="fa fa-th-large"></i>
+                                    </button>
+                                    <button class="p-1.5 text-neutral-400 hover:bg-neutral-100 transition-colors">
+                                        <i class="fa fa-list"></i>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- 笔记卡片网格 -->
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <!-- 笔记卡片 1 -->
+                        <div class="bg-white rounded-xl shadow-sm overflow-hidden card-hover border border-neutral-200">
+                            <div class="h-40 overflow-hidden">
+                                <img src="https://picsum.photos/id/0/600/400" alt="Python数据分析笔记封面" class="w-full h-full object-cover transition-transform duration-500 hover:scale-110">
+                            </div>
+                            <div class="p-5">
+                                <div class="flex items-center mb-3">
+                                    <span class="bg-blue-100 text-blue-600 text-xs px-2 py-1 rounded-full">Python</span>
+                                    <span class="ml-auto text-neutral-400 text-sm flex items-center">
+                                        <i class="fa fa-calendar-o mr-1"></i> 2023-05-15
+                                    </span>
+                                </div>
+                                <h3 class="font-bold text-lg mb-2 line-clamp-2 hover:text-primary transition-colors">
+                                    <a href="#">Python数据分析入门：Pandas库常用操作总结</a>
+                                </h3>
+                                <p class="text-neutral-500 text-sm mb-4 line-clamp-2">
+                                    本文总结了Pandas库的常用数据处理操作，包括数据读取、清洗、转换和基本分析方法，适合初学者快速上手。
+                                </p>
+                                <div class="flex justify-between items-center">
+                                    <div class="flex items-center space-x-3">
+                                        <span class="text-neutral-400 text-sm flex items-center">
+                                            <i class="fa fa-eye mr-1"></i> 128
+                                        </span>
+                                        <span class="text-neutral-400 text-sm flex items-center">
+                                            <i class="fa fa-comment-o mr-1"></i> 8
+                                        </span>
+                                    </div>
+                                    <button class="text-neutral-400 hover:text-neutral-600 transition-colors">
+                                        <i class="fa fa-bookmark-o"></i>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- 笔记卡片 2 -->
+                        <div class="bg-white rounded-xl shadow-sm overflow-hidden card-hover border border-neutral-200">
+                            <div class="h-40 overflow-hidden">
+                                <img src="https://picsum.photos/id/160/600/400" alt="JavaScript异步编程笔记封面" class="w-full h-full object-cover transition-transform duration-500 hover:scale-110">
+                            </div>
+                            <div class="p-5">
+                                <div class="flex items-center mb-3">
+                                    <span class="bg-yellow-100 text-yellow-600 text-xs px-2 py-1 rounded-full">JavaScript</span>
+                                    <span class="ml-auto text-neutral-400 text-sm flex items-center">
+                                        <i class="fa fa-calendar-o mr-1"></i> 2023-05-10
+                                    </span>
+                                </div>
+                                <h3 class="font-bold text-lg mb-2 line-clamp-2 hover:text-primary transition-colors">
+                                    <a href="#">JavaScript异步编程：从回调到Promise再到Async/Await</a>
+                                </h3>
+                                <p class="text-neutral-500 text-sm mb-4 line-clamp-2">
+                                    详解JavaScript异步编程的发展历程，对比回调函数、Promise和Async/Await的使用场景和优缺点。
+                                </p>
+                                <div class="flex justify-between items-center">
+                                    <div class="flex items-center space-x-3">
+                                        <span class="text-neutral-400 text-sm flex items-center">
+                                            <i class="fa fa-eye mr-1"></i> 215
+                                        </span>
+                                        <span class="text-neutral-400 text-sm flex items-center">
+                                            <i class="fa fa-comment-o mr-1"></i> 12
+                                        </span>
+                                    </div>
+                                    <button class="text-primary hover:text-primary/80 transition-colors">
+                                        <i class="fa fa-bookmark"></i>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- 笔记卡片 3 -->
+                        <div class="bg-white rounded-xl shadow-sm overflow-hidden card-hover border border-neutral-200">
+                            <div class="h-40 overflow-hidden">
+                                <img src="https://picsum.photos/id/180/600/400" alt="React Hooks笔记封面" class="w-full h-full object-cover transition-transform duration-500 hover:scale-110">
+                            </div>
+                            <div class="p-5">
+                                <div class="flex items-center mb-3">
+                                    <span class="bg-blue-400/20 text-blue-500 text-xs px-2 py-1 rounded-full">React</span>
+                                    <span class="ml-auto text-neutral-400 text-sm flex items-center">
+                                        <i class="fa fa-calendar-o mr-1"></i> 2023-05-05
+                                    </span>
+                                </div>
+                                <h3 class="font-bold text-lg mb-2 line-clamp-2 hover:text-primary transition-colors">
+                                    <a href="#">React Hooks完全指南：从基础到高级用法</a>
+                                </h3>
+                                <p class="text-neutral-500 text-sm mb-4 line-clamp-2">
+                                    全面介绍React Hooks的使用方法，包括useState、useEffect、useContext等常用钩子，以及自定义钩子的创建。
+                                </p>
+                                <div class="flex justify-between items-center">
+                                    <div class="flex items-center space-x-3">
+                                        <span class="text-neutral-400 text-sm flex items-center">
+                                            <i class="fa fa-eye mr-1"></i> 186
+                                        </span>
+                                        <span class="text-neutral-400 text-sm flex items-center">
+                                            <i class="fa fa-comment-o mr-1"></i> 9
+                                        </span>
+                                    </div>
+                                    <button class="text-neutral-400 hover:text-neutral-600 transition-colors">
+                                        <i class="fa fa-bookmark-o"></i>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- 笔记卡片 4 -->
+                        <div class="bg-white rounded-xl shadow-sm overflow-hidden card-hover border border-neutral-200">
+                            <div class="h-40 overflow-hidden">
+                                <img src="https://picsum.photos/id/96/600/400" alt="Docker容器化笔记封面" class="w-full h-full object-cover transition-transform duration-500 hover:scale-110">
+                            </div>
+                            <div class="p-5">
+                                <div class="flex items-center mb-3">
+                                    <span class="bg-blue-300/20 text-blue-600 text-xs px-2 py-1 rounded-full">Docker</span>
+                                    <span class="ml-auto text-neutral-400 text-sm flex items-center">
+                                        <i class="fa fa-calendar-o mr-1"></i> 2023-04-28
+                                    </span>
+                                </div>
+                                <h3 class="font-bold text-lg mb-2 line-clamp-2 hover:text-primary transition-colors">
+                                    <a href="#">Docker容器化部署最佳实践</a>
+                                </h3>
+                                <p class="text-neutral-500 text-sm mb-4 line-clamp-2">
+                                    分享Docker容器化部署的最佳实践，包括镜像优化、容器编排、数据持久化和网络配置等关键知识点。
+                                </p>
+                                <div class="flex justify-between items-center">
+                                    <div class="flex items-center space-x-3">
+                                        <span class="text-neutral-400 text-sm flex items-center">
+                                            <i class="fa fa-eye mr-1"></i> 156
+                                        </span>
+                                        <span class="text-neutral-400 text-sm flex items-center">
+                                            <i class="fa fa-comment-o mr-1"></i> 6
+                                        </span>
+                                    </div>
+                                    <button class="text-neutral-400 hover:text-neutral-600 transition-colors">
+                                        <i class="fa fa-bookmark-o"></i>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- 笔记卡片 5 -->
+                        <div class="bg-white rounded-xl shadow-sm overflow-hidden card-hover border border-neutral-200">
+                            <div class="h-40 overflow-hidden">
+                                <img src="https://picsum.photos/id/119/600/400" alt="算法与数据结构笔记封面" class="w-full h-full object-cover transition-transform duration-500 hover:scale-110">
+                            </div>
+                            <div class="p-5">
+                                <div class="flex items-center mb-3">
+                                    <span class="bg-purple-100 text-purple-600 text-xs px-2 py-1 rounded-full">算法</span>
+                                    <span class="ml-auto text-neutral-400 text-sm flex items-center">
+                                        <i class="fa fa-calendar-o mr-1"></i> 2023-04-20
+                                    </span>
+                                </div>
+                                <h3 class="font-bold text-lg mb-2 line-clamp-2 hover:text-primary transition-colors">
+                                    <a href="#">常见排序算法的时间复杂度分析与实现</a>
+                                </h3>
+                                <p class="text-neutral-500 text-sm mb-4 line-clamp-2">
+                                    详细讲解冒泡排序、选择排序、插入排序、快速排序等常见排序算法的原理、实现和时间复杂度分析。
+                                </p>
+                                <div class="flex justify-between items-center">
+                                    <div class="flex items-center space-x-3">
+                                        <span class="text-neutral-400 text-sm flex items-center">
+                                            <i class="fa fa-eye mr-1"></i> 203
+                                        </span>
+                                        <span class="text-neutral-400 text-sm flex items-center">
+                                            <i class="fa fa-comment-o mr-1"></i> 15
+                                        </span>
+                                    </div>
+                                    <button class="text-primary hover:text-primary/80 transition-colors">
+                                        <i class="fa fa-bookmark"></i>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- 笔记卡片 6 -->
+                        <div class="bg-white rounded-xl shadow-sm overflow-hidden card-hover border border-neutral-200">
+                            <div class="h-40 overflow-hidden">
+                                <img src="https://picsum.photos/id/2/600/400" alt="CSS布局技巧笔记封面" class="w-full h-full object-cover transition-transform duration-500 hover:scale-110">
+                            </div>
+                            <div class="p-5">
+                                <div class="flex items-center mb-3">
+                                    <span class="bg-pink-100 text-pink-600 text-xs px-2 py-1 rounded-full">CSS</span>
+                                    <span class="ml-auto text-neutral-400 text-sm flex items-center">
+                                        <i class="fa fa-calendar-o mr-1"></i> 2023-04-15
+                                    </span>
+                                </div>
+                                <h3 class="font-bold text-lg mb-2 line-clamp-2 hover:text-primary transition-colors">
+                                    <a href="#">现代CSS布局技巧：Flexbox与Grid完全指南</a>
+                                </h3>
+                                <p class="text-neutral-500 text-sm mb-4 line-clamp-2">
+                                    全面介绍Flexbox和Grid两种现代CSS布局方式的使用方法和技巧，帮助你轻松实现各种复杂布局。
+                                </p>
+                                <div class="flex justify-between items-center">
+                                    <div class="flex items-center space-x-3">
+                                        <span class="text-neutral-400 text-sm flex items-center">
+                                            <i class="fa fa-eye mr-1"></i> 178
+                                        </span>
+                                        <span class="text-neutral-400 text-sm flex items-center">
+                                            <i class="fa fa-comment-o mr-1"></i> 10
+                                        </span>
+                                    </div>
+                                    <button class="text-neutral-400 hover:text-neutral-600 transition-colors">
+                                        <i class="fa fa-bookmark-o"></i>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- 分页 -->
+                    <div class="mt-10 flex justify-center">
+                        <nav class="flex items-center space-x-1">
+                            <a href="#" class="w-10 h-10 flex items-center justify-center rounded-lg border border-neutral-200 text-neutral-400 hover:bg-neutral-100 transition-colors">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
+                            <a href="#" class="w-10 h-10 flex items-center justify-center rounded-lg bg-primary text-white font-medium">1</a>
+                            <a href="#" class="w-10 h-10 flex items-center justify-center rounded-lg border border-neutral-200 hover:bg-neutral-100 transition-colors">2</a>
+                            <a href="#" class="w-10 h-10 flex items-center justify-center rounded-lg border border-neutral-200 hover:bg-neutral-100 transition-colors">3</a>
+                            <span class="w-10 h-10 flex items-center justify-center text-neutral-400">...</span>
+                            <a href="#" class="w-10 h-10 flex items-center justify-center rounded-lg border border-neutral-200 hover:bg-neutral-100 transition-colors">5</a>
+                            <a href="#" class="w-10 h-10 flex items-center justify-center rounded-lg border border-neutral-200 text-neutral-500 hover:bg-neutral-100 transition-colors">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
+                        </nav>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- 页脚 -->
+    <footer class="bg-white border-t border-neutral-200 mt-12">
+        <div class="container mx-auto px-4 py-8">
+            <div class="flex flex-col md:flex-row justify-between items-center">
+                <div class="flex items-center space-x-2 mb-4 md:mb-0">
+                    <i class="fa fa-book text-primary text-xl"></i>
+                    <span class="text-lg font-bold text-neutral-700">笔记空间</span>
+                </div>
+                
+                <div class="flex space-x-6 mb-4 md:mb-0">
+                    <a href="#" class="text-neutral-500 hover:text-primary transition-colors">
+                        <i class="fa fa-github text-xl"></i>
+                    </a>
+                    <a href="#" class="text-neutral-500 hover:text-primary transition-colors">
+                        <i class="fa fa-twitter text-xl"></i>
+                    </a>
+                    <a href="#" class="text-neutral-500 hover:text-primary transition-colors">
+                        <i class="fa fa-linkedin text-xl"></i>
+                    </a>
+                    <a href="#" class="text-neutral-500 hover:text-primary transition-colors">
+                        <i class="fa fa-envelope text-xl"></i>
+                    </a>
+                </div>
+                
+                <div class="text-neutral-400 text-sm">
+                    &copy; 2023 笔记空间. 基于 GitHub Pages 构建.
+                </div>
+            </div>
+        </div>
+    </footer>
+
+    <!-- 返回顶部按钮 -->
+    <button id="backToTop" class="fixed bottom-6 right-6 w-12 h-12 bg-primary text-white rounded-full shadow-lg flex items-center justify-center opacity-0 invisible transition-all duration-300 hover:bg-primary/90">
+        <i class="fa fa-arrow-up"></i>
+    </button>
+
+    <!-- JavaScript -->
+    <script>
+        // 导航栏滚动效果
+        const navbar = document.getElementById('navbar');
+        window.addEventListener('scroll', () => {
+            if (window.scrollY > 50) {
+                navbar.classList.add('py-2', 'shadow');
+                navbar.classList.remove('py-3');
+            } else {
+                navbar.classList.add('py-3');
+                navbar.classList.remove('py-2', 'shadow');
+            }
+        });
+        
+        // 移动端搜索框切换
+        const searchToggle = document.getElementById('searchToggle');
+        const mobileSearch = document.getElementById('mobileSearch');
+        searchToggle.addEventListener('click', () => {
+            mobileSearch.classList.toggle('hidden');
+        });
+        
+        // 主题切换按钮
+        const themeToggle = document.getElementById('themeToggle');
+        themeToggle.addEventListener('click', () => {
+            const icon = themeToggle.querySelector('i');
+            if (icon.classList.contains('fa-moon-o')) {
+                icon.classList.remove('fa-moon-o');
+                icon.classList.add('fa-sun-o');
+                // 这里可以添加暗色模式切换逻辑
+            } else {
+                icon.classList.remove('fa-sun-o');
+                icon.classList.add('fa-moon-o');
+                // 这里可以添加亮色模式切换逻辑
+            }
+        });
+        
+        // 返回顶部按钮
+        const backToTop = document.getElementById('backToTop');
+        window.addEventListener('scroll', () => {
+            if (window.scrollY > 300) {
+                backToTop.classList.remove('opacity-0', 'invisible');
+                backToTop.classList.add('opacity-100', 'visible');
+            } else {
+                backToTop.classList.add('opacity-0', 'invisible');
+                backToTop.classList.remove('opacity-100', 'visible');
+            }
+        });
+        
+        backToTop.addEventListener('click', () => {
+            window.scrollTo({
+                top: 0,
+                behavior: 'smooth'
+            });
+        });
+        
+        // 活跃度图表
+        const ctx = document.getElementById('activityChart').getContext('2d');
+        new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: ['1月', '2月', '3月', '4月', '5月', '6月'],
+                datasets: [{
+                    label: '笔记数量',
+                    data: [3, 5, 4, 7, 6, 8],
+                    borderColor: '#165DFF',
+                    backgroundColor: 'rgba(22, 93, 255, 0.1)',
+                    tension: 0.4,
+                    fill: true
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        display: false
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        grid: {
+                            display: true,
+                            color: 'rgba(0, 0, 0, 0.05)'
+                        }
+                    },
+                    x: {
+                        grid: {
+                            display: false
+                        }
+                    }
+                }
+            }
+        });
+        
+        // 平滑滚动
+        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+            anchor.addEventListener('click', function (e) {
+                e.preventDefault();
+                document.querySelector(this.getAttribute('href')).scrollIntoView({
+                    behavior: 'smooth'
+                });
+            });
+        });
+    </script>
+</body>
+</html>
