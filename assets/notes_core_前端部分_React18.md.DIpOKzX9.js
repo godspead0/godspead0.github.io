@@ -1,0 +1,1 @@
+import{_ as e,c as t,o as a}from"./chunks/framework.BR0IJ75L.js";const m=JSON.parse('{"title":"","description":"","frontmatter":{},"headers":[],"relativePath":"notes_core/前端部分/React18.md","filePath":"notes_core/前端部分/React18.md"}'),o={name:"notes_core/前端部分/React18.md"};function c(r,s,n,_,p,d){return a(),t("div")}const f=e(o,[["render",c]]);export{m as __pageData,f as default};

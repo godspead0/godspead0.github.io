@@ -1,0 +1,95 @@
+import{_ as s,c as a,o as p,ae as l}from"./chunks/framework.BR0IJ75L.js";const m=JSON.parse('{"title":"","description":"","frontmatter":{},"headers":[],"relativePath":"notes_core/语言部分/JAVA.md","filePath":"notes_core/语言部分/JAVA.md"}'),e={name:"notes_core/语言部分/JAVA.md"};function i(c,n,t,r,o,u){return p(),a("div",null,[...n[0]||(n[0]=[l(`<div class="language- vp-adaptive-theme"><button title="Copy Code" class="copy"></button><span class="lang"></span><pre class="shiki shiki-themes github-light github-dark vp-code" tabindex="0"><code><span class="line"><span>/**</span></span>
+<span class="line"><span> * 1.输出System.out.println(&quot;hello world&quot;);</span></span>
+<span class="line"><span> * 2.输入Scanner sc = new Scanner(System.in);</span></span>
+<span class="line"><span> * 3.调用sc的相关操作 sc.next()等于system.pause() 都是等待输入</span></span>
+<span class="line"><span> * 4.定义数组要在类型后加上[]</span></span>
+<span class="line"><span> * 5.动态定义数组：int[] arr = new int[5];申请五个空间 arr = {1,2,3,4,5};</span></span>
+<span class="line"><span> * 6.静态定义数组：int[] arr = {1,2,3,4,5};</span></span>
+<span class="line"><span> * 7.修改数组数据arr[0] = sc.nextInt();</span></span>
+<span class="line"><span> * 8.实体类javabean: 所有变量全部私有 提供公开的getter和setter方法</span></span>
+<span class="line"><span> * 9.extends 继承</span></span>
+<span class="line"><span> * 10.super.父类方法名 代表子类和父类方法名重复时不遵循就近原则 而是调用父类的方法</span></span>
+<span class="line"><span> * 11.方法重写：子类方法名与父类方法名相同形参相同 但是实现功能有区别 用来覆盖父类的对应方法 在前面加上方法校验@Override</span></span>
+<span class="line"><span> * 12.final修饰的类不被允许继承 修饰的方法不能被重写 修饰的变量不能被修改</span></span>
+<span class="line"><span> * 13.static final修饰的变量是常量 用大写字母和下划线进行链接 如：static final int MAX_NUM = 100;</span></span>
+<span class="line"><span> * 14.单例类：创建一个类，该类只有一个对象，并且对象能通过一个公共方法访问（语法见singleclass）</span></span>
+<span class="line"><span> * 15.设计模式：在Java里面有很多已经解决好的最佳方案</span></span>
+<span class="line"><span> * 16.abstract抽象类：抽象类只能有方法名不能有方法体 抽象类只是一个父类模板 不允许创建对象只允许被子类继承实现 一个类要继承抽象类必须要重写所有的方法 否则也要标为抽象类</span></span>
+<span class="line"><span> * 17.interface接口：只能写常量和抽象方法 在接口里面写的变量不需要加前缀 会自动加上public static final</span></span>
+<span class="line"><span> * 18.implements实现：作为实现类可以一个类实现多个接口 语法是：修饰符 class 实现类名 implements 接口1，接口2，接口3{}</span></span>
+<span class="line"><span> * 19.接口的三种新增方法：要在接口类内实现普通方法要用default修饰 实现私有方法要用private修饰这种情况下是不允许实现类调用的 静态方法要加上static修饰 这种情况只允许通过接口名进行调用</span></span>
+<span class="line"><span> * 20.抽象类和接口的相同点：</span></span>
+<span class="line"><span> *      1.都有抽象方法，不能创建对象</span></span>
+<span class="line"><span> *      2.都是派生子类形式，抽象类是被子类继承使用，接口是通过实现类进行实现</span></span>
+<span class="line"><span> *      3.一个类继承抽象类或者实现接口，都必须重写完所有的抽象方法，否则会报错</span></span>
+<span class="line"><span> *      4.都能支持多态，实现解耦合</span></span>
+<span class="line"><span> * 21.抽象类和接口的不同点：</span></span>
+<span class="line"><span> *      1.抽象类可以定义类的全部普通成员，接口只能定义常量和抽象方法</span></span>
+<span class="line"><span> *      2.抽象类只能被单继承，接口类可以被多实现</span></span>
+<span class="line"><span> *      3.一个类继承抽象类就不能继承其他类，一个类实现了接口还可以实现其他类和其他接口</span></span>
+<span class="line"><span> *      4.抽象类体现模板思想，利于做父类，实现代码的复用性</span></span>
+<span class="line"><span> *      5.接口更加适合做功能的解耦合，使得数据的分离更加方便</span></span>
+<span class="line"><span> * 22.代码块：写在类里面static{}是静态代码块可以完成对类的初始化 实例代码块{}不需要static修饰 本质就是static只被初始化一次的特性</span></span>
+<span class="line"><span> * 23.内部类：写在一个类内部的个体类</span></span>
+<span class="line"><span> *      1.成员内部类：public class 类名 引用时要外部对象.内部对象 Outer.Inner oi = new Outer().new Inner() 成员内部类可以直接访问外部类的静态成员 如果想拿到外部类那就用外部类名.this</span></span>
+<span class="line"><span> *      2.静态内部类：外部对象.内部对象 Outer.Inner oi = new Outer().Inner()</span></span>
+<span class="line"><span> *      3.局部内部类：没啥用</span></span>
+<span class="line"><span> *      4.匿名内部类：A a = new A(){}这种写法就是匿名函数类写法 直接new一个类名不需要具体对象 这种匿名类不是没有类名其类名为 类名$编号</span></span>
+<span class="line"><span> * 24.lambda:A a = ()-&gt;{} lambda只允许用于替代只有一个抽象方法的接口的匿名内部类 其实就是替换</span></span>
+<span class="line"><span>     * A a = new A(){           替换为       A a = () -&gt; {nb!!!!!}</span></span>
+<span class="line"><span>     *    public void a1(){</span></span>
+<span class="line"><span>     *         nb!!!!!</span></span>
+<span class="line"><span>     *    }</span></span>
+<span class="line"><span>     * }</span></span>
+<span class="line"><span>     * 此时A是 interface A{里面仅有一个方法}</span></span>
+<span class="line"><span> * 25.泛型：在类名后加上尖括号加上类型代表这里只能放对应的数据类型</span></span>
+<span class="line"><span> * 26.多线程：继承thread类就是线程，调用run方法就是执行线程内所要执行的任务，调用start方法才是启动线程 多线程本质就是将多个任务封装在多个不同模块中进行同步执行 具体的执行顺序是几乎没有的 如果使用run来启动线程会默认单线程执行</span></span>
+<span class="line"><span> * 27.多线程其二：实现Runnable接口 重写其中的run() 通过Runnable r = new MyRunnable()创建一个线程任务 这里的MyRunnable是继承自Runnable的接口类 将线程任务通过Thread t = new Thread(r)包装成线程对象进行处理 最后t.start()进行线程的启动执行</span></span>
+<span class="line"><span> * 28.多线程其三：callable接口 先创建任务对象重写call方法对任务进行封装 然后实例化一个对象 最后获取结果通过FutureTask实例化一个新对象来接受线程结束最终值 最后创建一个Thread对象接受任务 然后start执行线程 最终结果就在实例化的FutureTask对象的get方法里</span></span>
+<span class="line"><span> * 29.同步方法锁：synchronized(同步锁){核心代码}每次只允许一个线程加锁后进入，执行完毕自动解锁，然后执行其他线程</span></span>
+<span class="line"><span>    * 同步代码块锁：修饰符 synchronized 返回值类型 方法名称(形参列表){共享操作资源的代码} 如果是实例方法就使用this作为锁对象 如果是静态方法就使用类名.class作为锁对象</span></span>
+<span class="line"><span> * 30.线程池：ExecutorService实例化类的一个ThreadPoolExecutor创建一个线程池对象</span></span>
+<span class="line"><span> *    有七个参数: corePoolSize线程池核心线程的数量</span></span>
+<span class="line"><span> *              maximumPoolSize指定线程池的最大线程数量</span></span>
+<span class="line"><span> *              keepAliveTime临时线程的存活时间</span></span>
+<span class="line"><span> *              unit临时线程存活时间的单位</span></span>
+<span class="line"><span> *              workQueue指定线程的任务队列</span></span>
+<span class="line"><span> *              threadFactory指定线程池的线程工厂</span></span>
+<span class="line"><span> *              handler线程都在忙任务队列满了的时候新任务来了该怎么处理</span></span>
+<span class="line"><span> * 31.stream流：是一种处理方法 大概流程是先有数据源 然后调用方法 用stream的时候直接给对应的对象.stream就行了</span></span>
+<span class="line"><span> * 32.集合的使用：List&lt;String&gt; 集合名 = new ArrayList&lt;&gt;()</span></span>
+<span class="line"><span> * 33.IO流：都是对他们本身进行实例化 然后引用对应的方法</span></span>
+<span class="line"><span>     * 字节输入流InputStream</span></span>
+<span class="line"><span>     * 字节输出流OutputStream</span></span>
+<span class="line"><span>     * 字符输入流Reader</span></span>
+<span class="line"><span>     * 字符输出流Writer</span></span>
+<span class="line"><span> * 34.注解：public @interface 注解名{public 属性类型 属性名() default 默认值;}</span></span>
+<span class="line"><span>     * 注解不是程序本身 可以被其他程序读取 甚至可以通过反射获取元素本身</span></span>
+<span class="line"><span>     * 定义注解用@interface 注解名{} 自动继承java.lang.annotation.Annotation接口</span></span>
+<span class="line"><span>     * 元注解是注解的注解 比如@Target用于描述注解的使用范围 @Retention表示注解的生命周期</span></span>
+<span class="line"><span>     * public @interface 注解名{定义内容} 这是为了定义一个注解</span></span>
+<span class="line"><span>        * 自定义的每一个方法就是声明了一个配置参数</span></span>
+<span class="line"><span>        * 方法名称就是参数名称 格式是参数类型+参数名()+default+默认值(负数代表不存在)</span></span>
+<span class="line"><span>        * 返回值类型就是参数类型 返回值只能是基本类型Class String enum</span></span>
+<span class="line"><span>        * 可以通过default来声明参数默认值</span></span>
+<span class="line"><span>        * 注解元素必须要有值</span></span>
+<span class="line"><span> * 35.反射：允许程序在执行期借助于Reflection API取得任何类的相关信息 并且直接操作任意对象的内部属性和方法 由于加载完对应的类之后就会在堆区产生一个class对象用来反应类的结构 所以叫做反射</span></span>
+<span class="line"><span>    * 所有的类根本都是class类 class对象只能由系统建立</span></span>
+<span class="line"><span>    * 一个类在jvm中只会有一个class实例 每一个实例都是一个.class文件</span></span>
+<span class="line"><span>    * 获取对象三种方式 通过对象获得直接.getclass() forname获得 通过.class获得</span></span>
+<span class="line"><span>    * 所有的class类型：class 接口 一维数组 二维数组 注解 枚举 基本数据类型 void object</span></span>
+<span class="line"><span>    * </span></span>
+<span class="line"><span> * 37.创建实例为非静态内部类时不允许直接创建 要先创建外部类之后再创建内部类实例 静态内部类只能访问内部类的静态成员 而非静态内部类依赖外部类实例存在并且声明周期不独立 外部类实例被垃圾回收 内部类也会被销毁 非静态内部类是允许访问外部类的所有属性的 包括私有成员变量</span></span>
+<span class="line"><span> * 38.static只能修饰成员变量 不允许修饰局部变量 static的用法还有 比如静态只能调用静态 静态代表全局 static代码块不能在方法内 如果有多个静态代码块 那么会按照顺序一一执行</span></span>
+<span class="line"><span> * 39.构造快跟构造函数的关系 为什么构造块比构造函数先执行</span></span>
+<span class="line"><span>    静态代码块：用staitc声明，jvm加载类时执行，仅执行一次</span></span>
+<span class="line"><span>    构造代码块：类中直接用{}定义，每一次创建对象时执行。</span></span>
+<span class="line"><span>    执行顺序优先级：静态块,main(),构造块,构造方法。</span></span>
+<span class="line"><span> * 41.在构造函数中调用其他构造函数时要通过this进行调用 并且必须写在第一句且只能调用一次 成员方法不允许调用构造函数</span></span>
+<span class="line"><span> * 42.一个类被创建时 自动产生的都有什么 https://blog.csdn.net/SwordArcher/article/details/101172946</span></span>
+<span class="line"><span> * 43.一个类文件里不允许第二个类使用修饰符 只有与文件名相同的那个类才可以使用public进行修饰</span></span>
+<span class="line"><span> *</span></span>
+<span class="line"><span> *</span></span>
+<span class="line"><span> *</span></span>
+<span class="line"><span> *</span></span>
+<span class="line"><span> */</span></span></code></pre></div>`,1)])])}const b=s(e,[["render",i]]);export{m as __pageData,b as default};
