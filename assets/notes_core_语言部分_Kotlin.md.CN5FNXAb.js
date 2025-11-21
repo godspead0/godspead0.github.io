@@ -1,1 +1,0 @@
-import{_ as e,c as t,o}from"./chunks/framework.BR0IJ75L.js";const d=JSON.parse('{"title":"","description":"","frontmatter":{},"headers":[],"relativePath":"notes_core/语言部分/Kotlin.md","filePath":"notes_core/语言部分/Kotlin.md"}'),n={name:"notes_core/语言部分/Kotlin.md"};function r(a,s,c,i,_,l){return o(),t("div")}const m=e(n,[["render",r]]);export{d as __pageData,m as default};

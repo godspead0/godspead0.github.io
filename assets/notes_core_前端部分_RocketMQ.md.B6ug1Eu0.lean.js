@@ -1,1 +1,0 @@
-import{_ as e,c as t,o}from"./chunks/framework.BR0IJ75L.js";const m=JSON.parse('{"title":"","description":"","frontmatter":{},"headers":[],"relativePath":"notes_core/前端部分/RocketMQ.md","filePath":"notes_core/前端部分/RocketMQ.md"}'),c={name:"notes_core/前端部分/RocketMQ.md"};function r(a,s,n,_,p,d){return o(),t("div")}const f=e(c,[["render",r]]);export{m as __pageData,f as default};

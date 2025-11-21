@@ -1,1 +1,0 @@
-import{_ as e,c as t,o}from"./chunks/framework.BR0IJ75L.js";const m=JSON.parse('{"title":"","description":"","frontmatter":{},"headers":[],"relativePath":"notes_core/后端部分/Nginx.md","filePath":"notes_core/后端部分/Nginx.md"}'),n={name:"notes_core/后端部分/Nginx.md"};function r(a,s,c,i,_,p){return o(),t("div")}const f=e(n,[["render",r]]);export{m as __pageData,f as default};

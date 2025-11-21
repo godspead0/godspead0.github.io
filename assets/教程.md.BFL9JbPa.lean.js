@@ -1,1 +1,0 @@
-import{_ as i,c as a,o as n,ae as t}from"./chunks/framework.BR0IJ75L.js";const c=JSON.parse('{"title":"","description":"","frontmatter":{},"headers":[],"relativePath":"教程.md","filePath":"教程.md"}'),e={name:"教程.md"};function l(p,s,h,k,d,o){return n(),a("div",null,[...s[0]||(s[0]=[t("",48)])])}const g=i(e,[["render",l]]);export{c as __pageData,g as default};

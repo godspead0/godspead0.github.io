@@ -1,1 +1,0 @@
-import{_ as e,c as o,o as t}from"./chunks/framework.BR0IJ75L.js";const m=JSON.parse('{"title":"","description":"","frontmatter":{},"headers":[],"relativePath":"notes_core/后端部分/MongoDB.md","filePath":"notes_core/后端部分/MongoDB.md"}'),n={name:"notes_core/后端部分/MongoDB.md"};function r(a,s,c,_,p,d){return t(),o("div")}const f=e(n,[["render",r]]);export{m as __pageData,f as default};
