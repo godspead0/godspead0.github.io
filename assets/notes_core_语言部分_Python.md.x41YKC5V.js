@@ -1,0 +1,1 @@
+import{_ as e,c as t,o}from"./chunks/framework.BR0IJ75L.js";const m=JSON.parse('{"title":"","description":"","frontmatter":{},"headers":[],"relativePath":"notes_core/语言部分/Python.md","filePath":"notes_core/语言部分/Python.md"}'),n={name:"notes_core/语言部分/Python.md"};function r(a,s,c,_,p,d){return o(),t("div")}const f=e(n,[["render",r]]);export{m as __pageData,f as default};

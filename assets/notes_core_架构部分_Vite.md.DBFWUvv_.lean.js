@@ -1,0 +1,1 @@
+import{_ as e,c as t,o}from"./chunks/framework.BR0IJ75L.js";const m=JSON.parse('{"title":"","description":"","frontmatter":{},"headers":[],"relativePath":"notes_core/架构部分/Vite.md","filePath":"notes_core/架构部分/Vite.md"}'),r={name:"notes_core/架构部分/Vite.md"};function a(s,c,n,i,_,p){return o(),t("div")}const f=e(r,[["render",a]]);export{m as __pageData,f as default};
