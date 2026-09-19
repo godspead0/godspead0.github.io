@@ -190,6 +190,38 @@ try {
   notesApi.notes.value = []
   notesApi.hydratedFromCache.value = false
 
+  // ---- 安全：清除凭据必须连笔记正文缓存一起抹掉 ----
+  putCache({ v: 1, savedAt: 'x', lite: false, notes: [cachedNote] })
+  notesApi.hydrateFromCache()
+  check('purge 前缓存中确实含笔记正文', notesApi.notes.value[0]?.body === '缓存正文')
+  notesApi.purge()
+  check('purge 清空内存中的笔记列表', notesApi.notes.value.length === 0)
+  check('purge 抹掉 localStorage 里的笔记正文', localStorage.getItem('notes-manager.notes.v1') === null)
+  check('purge 重置同步时间与缓存标记', notesApi.lastSyncAt.value === '' && notesApi.hydratedFromCache.value === false)
+  check('purge 后无法再从缓存恢复', notesApi.hydrateFromCache() === 0)
+
+  // ---- 安全：仓库指纹变化时不得展示上一个仓库的缓存 ----
+  putCache({ v: 1, savedAt: 'x', lite: false, sig: 'tech:godspead0/其它仓库@master/全栈', notes: [cachedNote] })
+  notesApi.notes.value = []
+  check('仓库指纹不一致时丢弃缓存', notesApi.hydrateFromCache() === 0)
+  check('被判定为异仓库的缓存已被删除', localStorage.getItem('notes-manager.notes.v1') === null)
+
+  // 无 sig 字段的历史缓存仍需兼容（不能因为升级而丢数据）
+  putCache({ v: 1, savedAt: 'x', lite: false, notes: [cachedNote] })
+  check('无 sig 字段的旧缓存仍可恢复（向后兼容）', notesApi.hydrateFromCache() === 1)
+
+  // ---- 安全：打卡缓存也要能被抹掉 ----
+  const checkinsApi = (await load('/src/composables/useCheckins.js')).useCheckins()
+  localStorage.setItem('notes-manager.checkins.cache', JSON.stringify({ '2026-09-19': 3 }))
+  checkinsApi.hydrateFromCache()
+  check('purge 前打卡缓存已载入', checkinsApi.totalCheckins.value === 3)
+  checkinsApi.purge()
+  check('purge 抹掉 localStorage 里的打卡记录', localStorage.getItem('notes-manager.checkins.cache') === null)
+  check('purge 清空内存中的打卡数据', checkinsApi.totalCheckins.value === 0)
+
+  notesApi.purge()
+  localStorage.removeItem('notes-manager.notes.v1')
+
   console.log('\n[2] 搜索 / 筛选 / 排序（Fuse.js）')
   const { useSearch } = await load('/src/composables/useSearch.js')
   const { ref } = await import('vue')

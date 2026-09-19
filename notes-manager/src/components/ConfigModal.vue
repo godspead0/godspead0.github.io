@@ -7,6 +7,10 @@
  */
 import { computed, watch } from 'vue'
 import { useConfig } from '../composables/useConfig.js'
+import { useNotes } from '../composables/useNotes.js'
+import { useCheckins } from '../composables/useCheckins.js'
+import { confirmDialog } from '../composables/useConfirm.js'
+import { toast } from '../composables/useToast.js'
 import AppIcon from './AppIcon.vue'
 
 const {
@@ -43,8 +47,24 @@ async function onTest() {
   await saveAndTest()
 }
 
-function onReset() {
+/**
+ * 清除凭据 = 清除 Token + **本机缓存的笔记正文与打卡记录**。
+ * 只清 Token 是不够的：笔记正文缓存在 localStorage 里，
+ * 若不清掉，别人在这台电脑上打开网站仍能从缓存读到全部笔记。
+ */
+async function onReset() {
+  const ok = await confirmDialog({
+    title: '清除本机全部数据？',
+    message: '将删除本机保存的 Token、笔记缓存（含正文）与打卡缓存。',
+    detail: 'GitHub 仓库里的笔记不受影响，下次填入 Token 后可重新同步。',
+    confirmText: '清除',
+    danger: true,
+  })
+  if (!ok) return
   resetConfig()
+  useNotes().purge()
+  useCheckins().purge()
+  toast.info('已清除本机凭据与全部本地缓存')
 }
 
 function onKey(e) {
@@ -110,7 +130,8 @@ watch(showModal, (open) => {
               Token 仅保存在本浏览器的 <code class="font-mono">localStorage</code>，不会上传到任何服务器；
               但两个仓库都需要访问权限（fine-grained Token 可在同一 Token 里勾选多个仓库）。
               仍建议：<b>仅在私人设备上使用</b>，并创建<b>仅授权目标仓库 Contents: Read and write</b> 的
-              Token。若在公共电脑使用，用完请点击「清除凭据」。
+              Token。若在公共电脑使用，用完请点击「清除凭据」——
+              它会同时抹掉 Token、<b>本机缓存的笔记正文</b>与打卡记录。
             </span>
           </p>
         </div>
@@ -200,7 +221,7 @@ watch(showModal, (open) => {
 
         <!-- 操作区 -->
         <div class="mt-5 flex flex-wrap items-center justify-between gap-2">
-          <button class="btn btn-sm" @click="onReset">
+          <button class="btn btn-sm" title="清除 Token 与本机全部缓存（笔记正文、打卡记录）" @click="onReset">
             <AppIcon name="log-out" :size="13" /> 清除凭据
           </button>
           <div class="flex flex-wrap gap-2">

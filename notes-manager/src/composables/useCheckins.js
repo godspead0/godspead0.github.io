@@ -50,6 +50,22 @@ function writeCache(value) {
   }
 }
 
+/**
+ * 彻底抹除本机打卡数据（内存 + localStorage）
+ * 用于「清除凭据」：避免别人在共用电脑上从缓存读到你的打卡记录。
+ */
+function purge() {
+  try {
+    localStorage.removeItem(CACHE_KEY)
+  } catch {
+    /* 存储不可用时无需清理 */
+  }
+  data.value = {}
+  sha.value = ''
+  checkedToday.value = false
+  lastError.value = ''
+}
+
 /* ---------------------------------------------------------------- */
 
 const today = computed(() => toDateKey())
@@ -291,5 +307,6 @@ export function useCheckins() {
     setDay,
     autoCheckIn,
     flush,
+    purge,
   }
 }

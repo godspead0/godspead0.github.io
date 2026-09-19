@@ -19,7 +19,7 @@ tech_doc/                              ← 站点仓库（公开）
 │  ├─ src/services/                    # GitHub API / 笔记模型 / Markdown / 导出
 │  ├─ src/composables/                 # 状态管理（笔记、打卡、分类、搜索、配置）
 │  ├─ src/components/                  # 界面组件（含 SVG 打卡热力图）
-│  └─ scripts/smoke.mjs                # 离线冒烟测试（102 项断言）
+│  └─ scripts/smoke.mjs                # 离线冒烟测试（113 项断言）
 ├─ 提交笔记.bat                         # 写完笔记后双击即可提交推送（两个仓库依次提交）
 │                                      # 笔记仓库克隆位于站点目录之外：
 │                                      # D:\vscode_test_all\godspead0_understand\

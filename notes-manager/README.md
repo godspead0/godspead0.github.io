@@ -48,7 +48,7 @@ Personal Access Token（PAT）调用 GitHub Contents API，把 Markdown 笔记�
 | Markdown | marked 12（解析）+ DOMPurify 3（XSS 消毒，fail-closed） |
 | 导出 | `FileReader`（读取本地文件）/ `Blob`（单篇下载）/ JSZip（全站打包） |
 | 本地缓存 | `localStorage`（凭据、主题、打卡记录预热缓存） |
-| 测试 | `scripts/smoke.mjs`（Vite SSR + Node，102 项断言，无需浏览器） |
+| 测试 | `scripts/smoke.mjs`（Vite SSR + Node，113 项断言，无需浏览器） |
 
 ---
 
@@ -195,7 +195,7 @@ npm install
 npm run dev       # 开发服务器 http://localhost:5173
 npm run build     # 产物输出到 dist/
 npm run preview   # 本地预览构建产物 http://localhost:4173
-npm run smoke     # 冒烟测试（102 项断言，无浏览器依赖）
+npm run smoke     # 冒烟测试（113 项断言，无浏览器依赖）
 npm run verify    # build + smoke
 ```
 
@@ -214,6 +214,30 @@ Owner / Repo / Branch / 笔记目录 / Token，各自点「测试并保存」。
 - 老式经典 Token 需要 `repo` 作用域（私有仓库）；
 - **不要在公共电脑上使用**；用完点「清除凭据」，或直接使用浏览器的访客模式；
 - Token 泄露后立即到 GitHub Settings 吊销。
+
+### 6.1 本机缓存与「清除凭据」
+
+为让首屏秒开，笔记正文与打卡记录会缓存在 `localStorage`。这意味着
+**只清 Token 并不足以保护共用电脑上的数据** —— 别人仍能从缓存里读到全部笔记。
+
+因此「清除凭据」会一并抹除下列全部键，并清空内存状态：
+
+| localStorage 键 | 内容 |
+| --- | --- |
+| `notes-manager.vaults.v2` | 各仓库配置（含 Token） |
+| `notes-manager.config.v1` | 旧版扁平配置（含 Token，兼容保留） |
+| `notes-manager.notes.v1` | **笔记列表与正文** |
+| `notes-manager.checkins.cache` | 打卡记录预热缓存 |
+
+另有两道防护：
+
+- **仓库指纹**：笔记缓存里记录写入时的 `owner/repo/branch/笔记目录` 组合。
+  配置变更后指纹不匹配，缓存会被判为「上一个仓库的」并自动丢弃，
+  避免把别的仓库的笔记当成当前的展示（无 `sig` 字段的旧缓存按兼容处理）。
+- **无第三方脚本**：`index.html` 只加载本地 bundle，不引入任何 CDN / 统计脚本，
+  因此不存在第三方脚本读取 `localStorage` 中 Token 的路径。
+  Markdown 渲染走 `marked` + `DOMPurify` **fail-closed**（消毒器不可用则拒绝渲染），
+  以阻断「XSS 偷 Token」这条链。
 
 相关代码：`src/services/github.js`（`loadConfig` / `persistConfig` / `clearConfig`）、
 `src/composables/useConfig.js`（表单校验与连通性测试）。
@@ -320,7 +344,7 @@ npx serve dist        # 或任意静态服务器；预览时同样是相对路�
 ## 9. 测试
 
 ```bash
-npm run smoke                  # 离线：102 项断言
+npm run smoke                  # 离线：113 项断言
 SMOKE_NETWORK=1 npm run smoke  # 额外向 api.github.com 发 1 次请求，验证错误映射
 ```
 

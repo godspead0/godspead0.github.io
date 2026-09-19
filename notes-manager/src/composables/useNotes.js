@@ -53,6 +53,21 @@ const CACHE_VERSION = 1
 const cachedAt = ref('')
 
 /**
+ * 当前「已配置仓库」的指纹。
+ * ---------------------------------------------------------------
+ * 缓存里会记下写入时的指纹。若之后改了 Owner / Repo / 分支 / 笔记目录，
+ * 说明这份缓存属于**另一批仓库**，必须丢弃 —— 否则会把上一个仓库的笔记
+ * 当成当前的显示出来（张冠李戴，换机器使用时也是隐私问题）。
+ */
+function vaultSignature() {
+  const { vaults } = useConfig()
+  return vaults.value
+    .filter((v) => v.token && v.owner && v.repo)
+    .map((v) => `${v.id}:${v.owner}/${v.repo}@${v.branch}/${v.notesDir || ''}`)
+    .join('|')
+}
+
+/**
  * 从 localStorage 恢复笔记并预热 sha 缓存
  * @returns {number} 恢复的笔记条数（0 表示没有可用缓存）
  */
@@ -62,6 +77,11 @@ function hydrateFromCache() {
     if (!raw) return 0
     const data = JSON.parse(raw)
     if (!data || data.v !== CACHE_VERSION || !Array.isArray(data.notes)) return 0
+    // 仓库指纹不一致 → 丢弃缓存（旧版本缓存没有 sig 字段，按兼容处理）
+    if (data.sig !== undefined && data.sig !== vaultSignature()) {
+      localStorage.removeItem(CACHE_KEY)
+      return 0
+    }
     const list = data.notes.filter((n) => n && typeof n.path === 'string')
     if (!list.length) return 0
 
@@ -86,7 +106,13 @@ function hydrateFromCache() {
 /** 把当前笔记写入 localStorage；空间不足时退化为不含正文的精简版 */
 function persistCache() {
   const build = (list, lite) =>
-    JSON.stringify({ v: CACHE_VERSION, savedAt: new Date().toISOString(), lite, notes: list })
+    JSON.stringify({
+      v: CACHE_VERSION,
+      savedAt: new Date().toISOString(),
+      lite,
+      sig: vaultSignature(),
+      notes: list,
+    })
   try {
     localStorage.setItem(CACHE_KEY, build(notes.value, false))
   } catch {
@@ -359,6 +385,19 @@ function invalidateCache() {
   }
 }
 
+/**
+ * 彻底抹除本机笔记数据（内存 + localStorage）
+ * ---------------------------------------------------------------
+ * 用于「清除凭据」：只清 Token 是不够的 —— 笔记正文默认缓存在 localStorage，
+ * 若不清掉，别人在这台电脑上打开网站仍能从缓存里读到全部笔记。
+ */
+function purge() {
+  invalidateCache()
+  notes.value = []
+  lastSyncAt.value = ''
+  loadError.value = ''
+}
+
 /** 按 id 取笔记 */
 function getById(id) {
   return notes.value.find((n) => n.id === id) || null
@@ -383,6 +422,7 @@ export function useNotes() {
     remove,
     uploadLocal,
     invalidateCache,
+    purge,
     getById,
   }
 }
