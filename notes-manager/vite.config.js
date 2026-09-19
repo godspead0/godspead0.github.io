@@ -15,3 +15,4 @@ export default defineConfig({
     chunkSizeWarningLimit: 1500,
   },
 })
+// 网站构建与部署由 .github/workflows/deploy.yml 负责（GitHub Actions）
