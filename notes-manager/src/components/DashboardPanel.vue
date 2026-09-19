@@ -1,6 +1,6 @@
 <script setup>
 /**
- * 仪表盘：打卡热力图 + 统计指标 + 一键打卡
+ * 仪表盘：打卡热力图 + 统计指标（**全部只读**，页面上没有打卡 / 撤销 / 补卡入口）
  */
 import { computed, ref } from 'vue'
 import AppIcon from './AppIcon.vue'
@@ -30,7 +30,6 @@ const RANGES = [
 const rangeLabel = computed(() => RANGES.find((r) => r.weeks === rangeWeeks.value)?.label || '')
 
 const selectedDay = ref(toDateKey())
-const busy = ref(false)
 
 /** 选中日期的打卡次数与该日创建的笔记 */
 const dayInfo = computed(() => {
@@ -40,34 +39,7 @@ const dayInfo = computed(() => {
   return { key, count, created }
 })
 
-async function onCheckIn() {
-  busy.value = true
-  try {
-    await ws.checkins.checkIn(1)
-    selectedDay.value = toDateKey()
-  } finally {
-    busy.value = false
-  }
-}
-
-async function onUndo() {
-  busy.value = true
-  try {
-    await ws.checkins.undoToday()
-  } finally {
-    busy.value = false
-  }
-}
-
-async function addForSelectedDay() {
-  if (!dayInfo.value.key) return
-  busy.value = true
-  try {
-    await ws.checkins.checkIn(1, { date: dayInfo.value.key })
-  } finally {
-    busy.value = false
-  }
-}
+/* 本站只读：打卡 / 撤销等写入动作已全部移除，热力图仅用于回顾历史记录 */
 
 function onSelectDay(key) {
   selectedDay.value = key
@@ -105,13 +77,9 @@ const stats = computed(() => [
         </div>
 
         <div class="flex flex-wrap items-center gap-2">
-          <button class="btn btn-primary" :disabled="busy" @click="onCheckIn">
-            <AppIcon :name="busy ? 'loader' : 'check'" :size="15" />
-            {{ todayCount.value ? '再打一次卡 +1' : '今日一键打卡' }}
-          </button>
-          <button class="btn" :disabled="busy || !todayCount.value" title="撤销今日 1 次打卡" @click="onUndo">
-            <AppIcon name="undo" :size="14" /> 撤销
-          </button>
+          <span class="rounded-md border border-[var(--app-border)] px-2 py-1 text-[11px] muted">
+            记录来自 <code class="font-mono">checkins.json</code>（只读展示）
+          </span>
           <button class="btn" :disabled="checkinLoading.value" title="重新拉取 checkins.json" @click="ws.checkins.load()">
             <AppIcon :name="checkinLoading.value ? 'loader' : 'refresh'" :size="14" />
           </button>
@@ -165,28 +133,21 @@ const stats = computed(() => [
         @select="onSelectDay"
       />
 
-      <!-- 选中日期详情 -->
+      <!-- 选中日期详情（只读：不再提供补卡） -->
       <div class="mt-3 rounded-lg border border-[var(--app-border)] p-3 text-xs">
         <div class="flex flex-wrap items-center gap-2">
           <AppIcon name="calendar" :size="13" class="muted" />
           <b>{{ dayInfo.key }}</b>
           <span class="chip">{{ dayInfo.count }} 次打卡</span>
           <span class="chip">当日新建 {{ dayInfo.created.length }} 篇</span>
-          <button
-            class="btn btn-sm ml-auto"
-            :disabled="busy || dayInfo.key > toDateKey()"
-            title="为这天补一次打卡"
-            @click="addForSelectedDay"
-          >
-            <AppIcon name="plus" :size="12" /> 补卡 +1
-          </button>
         </div>
         <div v-if="dayInfo.created.length" class="mt-2 flex flex-wrap gap-1">
           <button
             v-for="n in dayInfo.created"
             :key="n.id"
             class="chip hover:underline"
-            @click="ws.openEdit(n)"
+            :title="`查看：${n.title}`"
+            @click="ws.detailNote.value = n"
           >
             {{ n.title }}
           </button>

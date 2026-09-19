@@ -76,16 +76,10 @@ function onOpen() {
         </div>
       </div>
 
-      <!-- 悬停操作 -->
+      <!-- 悬停操作（只读：仅提供下载） -->
       <div class="flex shrink-0 gap-1 opacity-0 transition group-hover:opacity-100 focus-within:opacity-100">
-        <button class="btn btn-sm" title="编辑" @click.stop="ws.openEdit(note)">
-          <AppIcon name="edit" :size="13" />
-        </button>
         <button class="btn btn-sm" title="下载 .md" @click.stop="ws.exportOne(note)">
           <AppIcon name="download" :size="13" />
-        </button>
-        <button class="btn btn-sm btn-danger" title="删除" @click.stop="ws.removeNote(note)">
-          <AppIcon name="trash" :size="13" />
         </button>
       </div>
     </div>

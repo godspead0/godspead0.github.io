@@ -1,13 +1,18 @@
 ﻿<#
-  把笔记镜像到「公开展示仓库」
+  把笔记镜像到「公开展示仓库」（单向）
   ------------------------------------------------------------------
   做三件事：
     1. 首次运行时克隆公开展示仓库
-    2. 把两个笔记仓库里的 .md 复制到公开仓库的对应子目录（含删除同步）
+    2. 把两个笔记工作区里的 .md 复制到公开仓库的对应子目录（含删除同步）
     3. 提交并推送
 
+  为什么是单向的？
+    网站是**纯只读**的：访客只能看，页面上没有任何新建/编辑/打卡入口，
+    因此公开仓库里不会出现"只存在于公开仓库"的笔记，不需要反向取回。
+    内容永远是「私有工作区 → 公开仓库」这一个方向。
+
   设计约束：
-    · 只复制 .md —— checkins.json / categories.json 由网站直接写入公开仓库，
+    · 只复制 .md / .markdown —— checkins.json / categories.json 属于网站数据，
       本脚本绝不触碰，否则会把打卡记录覆盖掉。
     · 源目录与目标子目录**全部由调用方传入**，脚本内不含任何仓库名/用户名，
       因此它可以安全地放在公开仓库里。
@@ -125,7 +130,8 @@ if (-not (Test-Path -LiteralPath (Join-Path $PublicDir '.git'))) {
   }
 }
 
-# ---------- 2. 镜像 Markdown ----------
+# ---------- 2. 镜像 Markdown（纯单向）----------
+#    网站是只读的，不会在公开仓库里生成长文，所以不需要反向取回。
 $nTech = Sync-MdTree -Src $TechNotesDir -Dst (Join-Path $PublicDir $TechDestSub)
 $nAlgo = Sync-MdTree -Src $AlgoNotesDir -Dst (Join-Path $PublicDir $AlgoDestSub)
 Say "镜像完成：技术 $nTech 篇、算法 $nAlgo 篇。"

@@ -2,7 +2,6 @@ import { createApp } from 'vue'
 import App from './App.vue'
 import './index.css'
 import { initTheme } from './composables/useTheme.js'
-import { useConfig } from './composables/useConfig.js'
 import { useCheckins } from './composables/useCheckins.js'
 import { useNotes } from './composables/useNotes.js'
 
@@ -23,8 +22,5 @@ app.config.errorHandler = (err, _instance, info) => {
   console.error('[notes-manager] 未捕获异常:', err, info)
 }
 
-// 若已配置凭据，启动即恢复"已连接"状态（真实校验交由用户点「测试并保存」）
-const { form, connected } = useConfig()
-if (form.token && form.owner && form.repo) connected.value = true
-
+// 本站只读、无凭据：数据源固定在 useConfig.js 的 PUBLIC_* 常量里，启动即可读。
 app.mount('#app')

@@ -152,9 +152,6 @@ const SORTS = [
         <button class="btn btn-sm" @click="selectedNotes.forEach((n) => ws.exportOne(n))">
           <AppIcon name="download" :size="12" /> 逐篇下载
         </button>
-        <button class="btn btn-sm btn-danger" @click="ws.removeMany(selectedNotes).then(clearSelection)">
-          <AppIcon name="trash" :size="12" /> 批量删除
-        </button>
         <button class="btn btn-sm ml-auto" @click="clearSelection">取消选择</button>
       </div>
     </Transition>
@@ -186,22 +183,19 @@ const SORTS = [
         </p>
       </div>
 
-      <!-- 未配置 -->
+      <!-- 没有笔记 -->
       <div v-else-if="!notes.length && !hasActiveFilter" class="empty">
         <AppIcon name="cloud" :size="28" class="muted" />
         <h3 class="text-sm font-semibold">还没有同步到任何笔记</h3>
         <p class="max-w-md text-xs leading-6 muted">
-          请先确认已配置 GitHub 数据仓库并完成一次同步；也可以直接拖拽本地 <code class="font-mono">.md</code>
-          文件到页面任意位置进行导入。
+          本站从公开展示仓库读取笔记。如果确实还没有内容，把 <code class="font-mono">.md</code>
+          放进笔记目录后跑一次「提交笔记.bat」，再回来点「立即同步」即可。
         </p>
         <div class="flex flex-wrap justify-center gap-2">
-          <button class="btn btn-sm btn-primary" @click="ws.openCreate()">
-            <AppIcon name="plus" :size="13" /> 新建笔记
+          <button class="btn btn-sm" @click="ws.config.openSource()">
+            <AppIcon name="sliders" :size="13" /> 数据来源
           </button>
-          <button class="btn btn-sm" @click="ws.config.openModal()">
-            <AppIcon name="sliders" :size="13" /> 连接设置
-          </button>
-          <button class="btn btn-sm" @click="ws.refresh()">
+          <button class="btn btn-sm btn-primary" @click="ws.refresh()">
             <AppIcon name="refresh" :size="13" /> 立即同步
           </button>
         </div>

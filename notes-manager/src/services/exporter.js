@@ -1,14 +1,16 @@
 /**
- * 导入 / 导出服务
+ * 导出服务（只读）
  * ---------------------------------------------------------------
  * 依赖浏览器原生能力：
- *   FileReader  -> 读取本地 .md 文件
  *   Blob + a[download] -> 单篇下载
- *   JSZip       -> 全站打包导出
+ *   JSZip              -> 全站打包导出
+ *
+ * 导入相关的能力（FileReader 读本地 .md、解析成笔记对象）已随只读改造移除 ——
+ * 站点不写入任何仓库。
  */
 
 import JSZip from 'jszip'
-import { serializeNote, parseNoteFile, NOTES_DIR, slugify } from './notes.js'
+import { serializeNote, slugify } from './notes.js'
 
 /** 触发浏览器下载 */
 export function downloadBlob(blob, filename) {
@@ -34,6 +36,26 @@ export function downloadNote(note) {
 }
 
 /**
+ * 笔记在导出包里的相对路径。
+ * ---------------------------------------------------------------
+ * 以前是把**所有**笔记扁平塞进一个写死的 `全栈/` 目录 ——
+ * 现在有两个分类（技术 / 算法），那样会让算法笔记也躺在 `全栈/` 下，
+ * 既名不副实又可能撞名。改成按分类建顶层目录，并保留原有的分类子文件夹结构。
+ * @returns {{top: string, rel: string}} top = 顶层目录（分类名），rel = 其下的相对路径
+ */
+export function zipEntryPath(note) {
+  const top = note.vaultLabel || note.vault || 'notes'
+  // note.path 形如 `全栈/前端部分/Vue.md`；剥掉笔记目录前缀，避免出现 `技术/全栈/...`
+  let rel = note.path || `${note.id}_${slugify(note.title)}.md`
+  const dir = note.vaultNotesDir
+  if (dir && (rel === dir || rel.startsWith(`${dir}/`))) {
+    rel = rel === dir ? '' : rel.slice(dir.length + 1)
+  }
+  if (!rel) rel = `${note.id}_${slugify(note.title)}.md`
+  return { top, rel }
+}
+
+/**
  * 打包全部笔记为 zip
  * @param {Array} notes
  * @param {object} [extras] 额外的 JSON 数据（checkins.json / categories.json）
@@ -42,14 +64,19 @@ export function downloadNote(note) {
 export async function downloadAllAsZip(notes, extras = {}, onProgress) {
   const list = Array.isArray(notes) ? notes : []
   const zip = new JSZip()
-  const folder = zip.folder(NOTES_DIR)
 
+  // 按分类（技术 / 算法）保留原有目录结构，方便直接扔回 Obsidian 等工具
+  const tops = new Set()
   list.forEach((note) => {
-    const name = `${note.id}_${slugify(note.title)}.md`
-    folder.file(name, serializeNote(note))
+    const { top, rel } = zipEntryPath(note)
+    let folder = zip.folder(top)
+    const slash = rel.lastIndexOf('/')
+    if (slash > 0) folder = folder.folder(rel.slice(0, slash))
+    folder.file(rel.slice(slash + 1), serializeNote(note))
+    tops.add(top)
   })
 
-  // 保留按年份-月份归档的目录结构，方便直接扔回 Obsidian 等工具
+  // 另存一份按年份-月份归档的结构
   const archive = zip.folder('archive')
   list.forEach((note) => {
     const d = new Date(note.created || note.updated || Date.now())
@@ -71,10 +98,10 @@ export async function downloadAllAsZip(notes, extras = {}, onProgress) {
       `导出时间：${new Date().toLocaleString('zh-CN')}`,
       `笔记总数：${list.length}`,
       '',
-      `- \`${NOTES_DIR}/\` 扁平存放全部 Markdown（含 frontmatter）`,
-      '- `archive/` 按 年份-月份 归档',
-      '- `checkins.json` 打卡记录',
-      '- `categories.json` 分类与标签元数据',
+      ...[...tops].map((t) => `- \`${t}/\` 该分类下的 Markdown（含 frontmatter，保留原目录结构）`),
+      '- `archive/` 按 年份-月份 归档（扁平）',
+      '- `checkins.json` 打卡记录（若存在）',
+      '- `categories.json` 分类与标签元数据（若存在）',
       '',
     ].join('\n'),
   )
@@ -86,55 +113,4 @@ export async function downloadAllAsZip(notes, extras = {}, onProgress) {
   const stamp = new Date().toISOString().slice(0, 10)
   downloadBlob(blob, `notes-backup-${stamp}.zip`)
   return list.length
-}
-
-/**
- * 读取本地 File 对象为文本（FileReader）
- * @param {File} file
- * @returns {Promise<string>}
- */
-export function readFileAsText(file) {
-  return new Promise((resolve, reject) => {
-    if (!file) {
-      reject(new Error('未选择文件'))
-      return
-    }
-    if (file.size > 8 * 1024 * 1024) {
-      reject(new Error(`文件过大（${(file.size / 1024 / 1024).toFixed(1)}MB），建议拆分后再上传。`))
-      return
-    }
-    const reader = new FileReader()
-    reader.onload = () => resolve(String(reader.result ?? ''))
-    reader.onerror = () => reject(new Error(`读取文件失败：${file.name}`))
-    reader.onabort = () => reject(new Error(`读取被中断：${file.name}`))
-    reader.readAsText(file, 'utf-8')
-  })
-}
-
-/**
- * 批量解析本地 .md 文件为笔记对象（不含 sha / path，由上传阶段补齐）
- * @param {FileList|File[]} files
- * @returns {Promise<{notes: Array, errors: Array<{name:string,message:string}>}>}
- */
-export async function parseLocalMarkdownFiles(files) {
-  const list = Array.from(files || []).filter((f) => /\.(md|markdown|txt)$/i.test(f.name))
-  const notes = []
-  const errors = []
-
-  for (const file of list) {
-    try {
-      const raw = await readFileAsText(file)
-      const note = parseNoteFile({ path: `${NOTES_DIR}/${file.name}`, sha: '', size: file.size }, raw)
-      if (!note.title || note.title === '未命名笔记') {
-        note.title = file.name.replace(/\.(md|markdown|txt)$/i, '')
-      }
-      note.source = file.name
-      notes.push(note)
-    } catch (err) {
-      errors.push({ name: file.name, message: err?.message || String(err) })
-    }
-  }
-
-  if (!list.length) errors.push({ name: '-', message: '未找到任何 .md / .markdown 文件' })
-  return { notes, errors }
 }

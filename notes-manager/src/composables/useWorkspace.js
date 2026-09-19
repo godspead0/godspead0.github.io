@@ -1,11 +1,16 @@
 /**
- * 工作区编排层（应用级状态 + 副作用编排）
+ * 工作区编排层（应用级状态 + 副作用编排）—— 纯只读
  * ---------------------------------------------------------------
  * 把"UI 弹窗状态"与"跨模块业务动作"收敛到一处，避免组件之间互相传参：
- *   - 同步：笔记 + 打卡 + 分类元数据 三份数据并行拉取
- *   - 编辑：新建 / 编辑弹窗状态机，保存成功后自动静默打卡 +1
- *   - 导入 / 导出 / 删除
- * 各组件只需 `const ws = useWorkspace()` 即可读写全局状态。
+ *   - 同步：笔记 + 打卡 + 分类元数据 三份数据**并行拉取**（全部只读）
+ *   - 详情：查看笔记浮层
+ *   - 导出：单篇下载 / 复制原文 / 全站打包 zip
+ *
+ * ⚠️ 本站不写入 GitHub：
+ *   新建 / 编辑 / 删除 / 导入 / 打卡 / 补登记分类 等写动作一律没有入口，
+ *   连"从笔记补登记分类元数据"这种隐式写也去掉了 —— 否则访客每次打开页面
+ *   都会尝试写 categories.json，然后每个人都看到一条报错。
+ *   内容更新靠本地写好笔记后运行「提交笔记.bat」推送到公开仓库。
  */
 import { computed, ref } from 'vue'
 import { useNotes } from './useNotes.js'
@@ -13,7 +18,6 @@ import { useCheckins } from './useCheckins.js'
 import { useCategories } from './useCategories.js'
 import { useConfig } from './useConfig.js'
 import { toast } from './useToast.js'
-import { confirmDialog } from './useConfirm.js'
 import { downloadAllAsZip, downloadNote } from '../services/exporter.js'
 import { serializeNote } from '../services/notes.js'
 
@@ -23,10 +27,8 @@ const categories = useCategories()
 
 /* ------------------------------ UI 状态 ------------------------------ */
 
-const editor = ref({ open: false, mode: 'create', note: null })
 const detailNote = ref(null)
 const exporting = ref(false)
-const importing = ref(false)
 const sidebarOpen = ref(false)
 
 /* ------------------------------ 同步 ------------------------------ */
@@ -34,124 +36,18 @@ const sidebarOpen = ref(false)
 const syncing = computed(() => notesApi.loading.value || checkins.loading.value)
 
 /**
- * 三路并行同步；单路失败不影响其它两路。
+ * 三路并行拉取；单路失败不影响其它两路。
  * @param {{silent?: boolean}} [opts]
  */
 async function refresh(opts = {}) {
   if (!useConfig().configured.value) {
-    toast.warn('请先在「连接设置」中填写 GitHub 仓库与 Token')
+    toast.warn('尚未配置数据仓库，请检查 src/composables/useConfig.js 中的 PUBLIC_* 常量')
     return
   }
-  await Promise.allSettled([
-    notesApi.loadAll(opts),
-    checkins.load({ silent: true }),
-    categories.load({ silent: true }),
-  ])
-  // 用笔记里出现过的分类/标签补齐元数据（失败静默，不打断使用）
-  categories.syncFromNotes(notesApi.notes.value).catch(() => {})
+  await Promise.allSettled([notesApi.loadAll(opts), checkins.load({ silent: true }), categories.load({ silent: true })])
 }
 
-/* ------------------------------ 编辑 ------------------------------ */
-
-function openCreate() {
-  editor.value = { open: true, mode: 'create', note: null }
-}
-
-function openEdit(note) {
-  editor.value = { open: true, mode: 'edit', note }
-  detailNote.value = null
-}
-
-function closeEditor() {
-  editor.value = { ...editor.value, open: false }
-}
-
-/**
- * 提交编辑器内容
- * @param {{id?:string,title:string,category:string,tags:string[],body:string,created:string}} draft
- */
-async function submitDraft(draft) {
-  const existing = editor.value.mode === 'edit' ? editor.value.note : null
-  let saved = null
-
-  if (existing) {
-    saved = await notesApi.update({
-      ...existing,
-      title: draft.title,
-      category: draft.category,
-      tags: draft.tags,
-      body: draft.body,
-    })
-  } else {
-    saved = await notesApi.create({
-      title: draft.title,
-      category: draft.category,
-      tags: draft.tags,
-      body: draft.body,
-      created: draft.created,
-    })
-  }
-
-  if (!saved) return null
-
-  closeEditor()
-  // 编辑/新建成功后自动触发当日打卡 +1（异步、静默，失败不打断主流程）
-  checkins.autoCheckIn(existing ? '笔记已更新' : '笔记已创建')
-  return saved
-}
-
-/* ------------------------------ 删除 ------------------------------ */
-
-async function removeNote(note) {
-  if (!note) return false
-  const ok = await confirmDialog({
-    title: '删除笔记',
-    message: `确认删除「${note.title}」？\n文件：${note.path}`,
-    detail: '该操作会同时删除 GitHub 仓库中的对应文件，且不可撤销。',
-    confirmText: '删除',
-    danger: true,
-  })
-  if (!ok) return false
-  const done = await notesApi.remove(note)
-  if (done && detailNote.value?.id === note.id) detailNote.value = null
-  return done
-}
-
-/** 批量删除 */
-async function removeMany(list) {
-  const items = (list || []).filter(Boolean)
-  if (!items.length) {
-    toast.info('请先勾选要删除的笔记')
-    return
-  }
-  const ok = await confirmDialog({
-    title: `删除选中的 ${items.length} 篇笔记？`,
-    message: items.map((n) => `· ${n.title}`).join('\n'),
-    detail: '将逐个删除 GitHub 仓库中的对应文件，不可撤销。',
-    confirmText: '全部删除',
-    danger: true,
-  })
-  if (!ok) return
-  let done = 0
-  for (const note of items) {
-    if (await notesApi.remove(note)) done += 1
-  }
-  toast.info(`批量删除完成：成功 ${done} / ${items.length}`)
-}
-
-/* ------------------------------ 导入 / 导出 ------------------------------ */
-
-async function importFiles(files) {
-  if (!files || !files.length) return
-  importing.value = true
-  try {
-    const result = await notesApi.uploadLocal(files)
-    if (result.ok) checkins.autoCheckIn(`导入 ${result.ok} 篇笔记`)
-    return result
-  } finally {
-    importing.value = false
-  }
-}
+/* ------------------------------ 导出 ------------------------------ */
 
 /**
  * 导出：全部笔记（可只导出当前筛选结果）
@@ -207,7 +103,6 @@ export function useWorkspace() {
     // 数据
     notes: notesApi.notes,
     notesLoading: notesApi.loading,
-    saving: notesApi.saving,
     progress: notesApi.progress,
     lastSyncAt: notesApi.lastSyncAt,
     loadError: notesApi.loadError,
@@ -217,21 +112,12 @@ export function useWorkspace() {
     categories,
     config: useConfig(),
     // UI
-    editor,
     detailNote,
     exporting,
-    importing,
     syncing,
     sidebarOpen,
-    // 动作
+    // 动作（全部只读）
     refresh,
-    openCreate,
-    openEdit,
-    closeEditor,
-    submitDraft,
-    removeNote,
-    removeMany,
-    importFiles,
     exportZip,
     exportOne,
     copyRaw,

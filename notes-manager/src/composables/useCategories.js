@@ -1,5 +1,5 @@
 /**
- * 分类与标签元数据 Composable
+ * 分类与标签元数据 Composable —— 只读
  * ---------------------------------------------------------------
  * 数据文件： categories.json
  * 格式：
@@ -12,9 +12,14 @@
  * 该文件只承载"展示元数据"（颜色、排序、别名）。
  * 笔记与分类的真实归属关系始终以笔记 frontmatter 为准，
  * 因此 categories.json 缺失/损坏不会导致筛选功能不可用 —— 会依据笔记自动推导。
+ *
+ * ⚠️ 本站只读：不再写回 categories.json。原先 refresh() 后会自动调用
+ *    syncFromNotes() 把新分类补登记进元数据 —— 那是**每次打开页面都会触发的隐式写**，
+ *    只读站点必须去掉，否则每个访客都会看到一条写入失败报错。
+ *    缺的颜色由 colorFor() 按名字哈希稳定推导，效果一样。
  */
 import { computed, ref } from 'vue'
-import { GithubError, getFile, saveFile } from '../services/github.js'
+import { GithubError, getFile } from '../services/github.js'
 import { toast } from './useToast.js'
 import { useConfig } from './useConfig.js'
 
@@ -26,7 +31,6 @@ const PALETTE = ['#3b82f6', '#8b5cf6', '#ec4899', '#f59e0b', '#10b981', '#06b6d4
 const meta = ref({ categories: [], tags: [], updated: '' })
 const sha = ref('')
 const loading = ref(false)
-const saving = ref(false)
 
 const categoryNames = computed(() => meta.value.categories.map((c) => c.name))
 const tagNames = computed(() => meta.value.tags.map((t) => t.name))
@@ -80,103 +84,15 @@ async function load(opts = {}) {
   }
 }
 
-async function persist(message = 'chore: update categories.json') {
-  saving.value = true
-  try {
-    const vault = useConfig().primaryVault.value
-    const payload = { ...meta.value, updated: new Date().toISOString() }
-    const { sha: newSha } = await saveFile(
-      CATEGORIES_PATH,
-      JSON.stringify(payload, null, 2),
-      sha.value || undefined,
-      message,
-      vault,
-    )
-    sha.value = newSha
-    meta.value = payload
-    return true
-  } catch (err) {
-    toast.error(err instanceof GithubError ? err.message : err?.message || '分类元数据保存失败')
-    return false
-  } finally {
-    saving.value = false
-  }
-}
-
-/** 将笔记中出现过、但元数据里没有的分类/标签补登记 */
-async function syncFromNotes(notes) {
-  const catSeen = new Set(meta.value.categories.map((c) => c.name))
-  const tagSeen = new Set(meta.value.tags.map((t) => t.name))
-  let changed = false
-
-  for (const note of notes || []) {
-    if (note.category && !catSeen.has(note.category)) {
-      catSeen.add(note.category)
-      meta.value.categories.push({ name: note.category, color: '' })
-      changed = true
-    }
-    for (const tag of note.tags || []) {
-      if (!tagSeen.has(tag)) {
-        tagSeen.add(tag)
-        meta.value.tags.push({ name: tag, color: '' })
-        changed = true
-      }
-    }
-  }
-
-  if (changed) return persist('chore: sync categories from notes')
-  return false
-}
-
-function addCategory(name, color = '') {
-  const n = String(name || '').trim()
-  if (!n) return false
-  if (meta.value.categories.some((c) => c.name === n)) {
-    toast.info(`分类「${n}」已存在`)
-    return false
-  }
-  meta.value.categories.push({ name: n, color })
-  return true
-}
-
-function removeCategory(name) {
-  meta.value.categories = meta.value.categories.filter((c) => c.name !== name)
-}
-
-function addTag(name, color = '') {
-  const n = String(name || '').trim().replace(/^#/, '')
-  if (!n) return false
-  if (meta.value.tags.some((t) => t.name === n)) return false
-  meta.value.tags.push({ name: n, color })
-  return true
-}
-
-function removeTag(name) {
-  meta.value.tags = meta.value.tags.filter((t) => t.name !== name)
-}
-
-function renameCategory(from, to) {
-  const target = meta.value.categories.find((c) => c.name === from)
-  if (target) target.name = String(to || '').trim() || from
-}
 
 export function useCategories() {
   return {
     CATEGORIES_PATH,
     meta,
-    sha,
     loading,
-    saving,
     categoryNames,
     tagNames,
     colorFor,
     load,
-    persist,
-    syncFromNotes,
-    addCategory,
-    removeCategory,
-    addTag,
-    removeTag,
-    renameCategory,
   }
 }

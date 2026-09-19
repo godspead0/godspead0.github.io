@@ -1,14 +1,17 @@
 /**
  * 笔记领域模型
  * ---------------------------------------------------------------
- * 文件名约定： 全栈/{id}_{slug}.md
- *   id    : 13 位时间戳（毫秒级，天然可排序且难冲突）
- *   slug  : 标题转写，保留中文；仅剔除文件系统非法字符
+ * 仓库内的笔记路径由「笔记目录 + 子目录 + 文件名」组成，例如：
+ *   全栈/前端部分/Vue.md      （技术分类，笔记目录 = 全栈）
+ *   算法/力扣/二分查找.md      （算法分类，笔记目录 = 算法）
+ *
+ * ⚠️ 扫描起点（笔记目录）**必须由调用方传入**，不能硬编码。
+ *    分类推断的语义是「笔记目录之下的第一层子目录」，
+ *    所以要先剥掉笔记目录前缀，否则算法笔记会被整体归到「算法」这一个分类里，
+ *    而不是它自己所在的 `力扣` / `洛谷` / …
  */
 
 import { extractLeadLine, extractTitleFromBody, parseFrontmatter, stringifyFrontmatter } from './frontmatter.js'
-
-export const NOTES_DIR = '全栈'
 
 /** 生成 13 位时间戳 id */
 export function genId() {
@@ -30,11 +33,18 @@ export function slugify(title) {
   return base || 'untitled'
 }
 
-/** 由 id + 标题构造仓库内相对路径 */
-export function buildPath(id, title, dir = NOTES_DIR) {
-  const name = `${id}_${slugify(title)}.md`
-  const base = String(dir || '').replace(/^\/+|\/+$/g, '')
-  return base ? `${base}/${name}` : name
+/**
+ * 剥掉「笔记目录」前缀，得到笔记目录内的相对路径。
+ *   stripRootDir('全栈/前端部分/Vue.md', '全栈')  -> '前端部分/Vue.md'
+ *   stripRootDir('算法/力扣/a.md', '算法')       -> '力扣/a.md'
+ *   stripRootDir('力扣/a.md', '')                -> '力扣/a.md'（笔记目录 = 仓库根）
+ */
+export function stripRootDir(path, root = '') {
+  const p = String(path || '')
+  const r = String(root || '').replace(/^\/+|\/+$/g, '')
+  if (!r) return p
+  if (p === r) return ''
+  return p.startsWith(`${r}/`) ? p.slice(r.length + 1) : p
 }
 
 /** 由路径解析出 id（容错：老文件可能没有 id 前缀） */
@@ -42,14 +52,6 @@ export function idFromPath(path) {
   const name = String(path || '').split('/').pop() || ''
   const m = name.match(/^(\d{8,})[_-]/)
   return m ? m[1] : ''
-}
-
-/**
- * 是否为 SPA 托管命名的文件（全栈/{id}_{slug}.md）。
- * 用户手工整理的历史笔记不满足该命名，更新时应原位写回，避免被改名搬移。
- */
-export function isManagedPath(path) {
-  return new RegExp(`^${NOTES_DIR}/\\d{8,}[_-][^/]*\\.md$`, 'i').test(String(path || ''))
 }
 
 /**
@@ -65,14 +67,14 @@ export function stableId(path) {
 }
 
 /**
- * 从路径推断分类：取一级目录名。
- * 兼容两种布局：
- *   全栈/前端部分/Vue.md -> 前端部分
- *   前端部分/Vue.md            -> 前端部分
+ * 从路径推断分类：取「笔记目录之下」的一级目录名。
+ *   全栈/前端部分/Vue.md  （root=全栈）-> 前端部分
+ *   算法/力扣/二分查找.md  （root=算法）-> 力扣
+ *   前端部分/Vue.md       （root=''）  -> 前端部分
+ * 直接躺在笔记目录根下的文件没有分类（归入「未分类」）。
  */
-export function categoryFromPath(path) {
-  let parts = String(path || '').split('/').filter(Boolean)
-  if (parts[0] === NOTES_DIR) parts = parts.slice(1)
+export function categoryFromPath(path, root = '') {
+  const parts = stripRootDir(path, root).split('/').filter(Boolean)
   return parts.length >= 2 ? parts[0] : ''
 }
 
@@ -84,16 +86,16 @@ export function categoryFromPath(path) {
  *     全栈/1758000000000_示例-标题.md -> 示例-标题（去掉 id 前缀）
  *     全栈/一些个人理解/.md          -> 一些个人理解（文件名不可用时退回上级目录）
  */
-export function titleFromPath(path) {
-  const parts = String(path || '').split('/').filter(Boolean)
+export function titleFromPath(path, root = '') {
+  const parts = stripRootDir(path, root).split('/').filter(Boolean)
   const file = parts.pop() || ''
   const base = file
     .replace(/\.(md|markdown)$/i, '')
-    .replace(/^\d{8,}[_-]/, '') // 去掉 SPA 托管命名的 id 前缀
+    .replace(/^\d{8,}[_-]/, '') // 去掉历史托管命名的 id 前缀
     .replace(/_+/g, ' ')
     .trim()
   if (base) return base
-  return parts.filter((p) => p !== NOTES_DIR).pop() || ''
+  return parts.pop() || ''
 }
 
 /**
@@ -127,12 +129,14 @@ export function createNote(input = {}) {
   const now = new Date().toISOString()
   const body = String(input.body ?? '')
   const meta = input.meta || {}
+  // 「笔记目录」决定路径如何解释（剥掉它才是分类 / 标题推断的起点）
+  const root = input.vaultNotesDir || input.root || ''
   // 标题优先级：显式标题 → 正文标题 → 文件名 → 正文首行
   const title =
     input.title ||
     meta.title ||
     extractTitleFromBody(body) ||
-    titleFromPath(input.path) ||
+    titleFromPath(input.path, root) ||
     extractLeadLine(body) ||
     '未命名笔记'
 
@@ -153,17 +157,20 @@ export function createNote(input = {}) {
 
 /**
  * 解析远端 Markdown 文件为笔记对象
- * @param {{path: string, sha: string, size: number}} file
+ * @param {{path: string, sha: string, size: number}} file 仓库内相对路径
  * @param {string} raw
+ * @param {{root?: string}} [opts] root = 该 vault 的笔记目录（如 `全栈` / `算法`）。
+ *   分类与标题都从「剥掉 root 之后」的路径推断 —— 不传的话多分类会全部挤成一级分类。
  */
-export function parseNoteFile(file, raw) {
+export function parseNoteFile(file, raw, opts = {}) {
   const { meta, body } = parseFrontmatter(raw)
   const path = file?.path || ''
+  const root = opts.root || ''
   return createNote({
     id: meta.id || idFromPath(path) || stableId(path),
-    title: meta.title || extractTitleFromBody(body) || titleFromPath(path) || extractLeadLine(body),
+    title: meta.title || extractTitleFromBody(body) || titleFromPath(path, root) || extractLeadLine(body),
     // 历史笔记没有 frontmatter，用目录名兜底为分类
-    category: meta.category || categoryFromPath(path),
+    category: meta.category || categoryFromPath(path, root),
     tags: meta.tags,
     created: meta.created,
     updated: meta.updated,
@@ -172,6 +179,7 @@ export function parseNoteFile(file, raw) {
     sha: file?.sha,
     size: file?.size,
     source: meta.source,
+    vaultNotesDir: root,
   })
 }
 

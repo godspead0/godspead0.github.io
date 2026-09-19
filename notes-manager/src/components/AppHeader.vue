@@ -1,7 +1,10 @@
 <script setup>
 /**
- * 顶部导航栏
- * 搜索框 / 全局动作（同步、新建、导入、导出、打卡、主题、设置）
+ * 顶部导航栏（纯只读）
+ * 搜索框 / 全局动作（同步、导出、主题、数据来源）
+ *
+ * 本站不提供新建 / 导入 / 打卡 —— 那些写入动作都在本地由
+ * 「提交笔记.bat」完成，页面不向 GitHub 发起任何写请求。
  */
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import AppIcon from './AppIcon.vue'
@@ -10,26 +13,21 @@ import { useSearch } from '../composables/useSearch.js'
 import { useTheme } from '../composables/useTheme.js'
 import { useConfig } from '../composables/useConfig.js'
 
-const emit = defineEmits(['pick-files'])
-
 const ws = useWorkspace()
 const { notes } = ws
 const { keyword, hasActiveFilter, clearFilters, filteredCount } = useSearch(notes)
 const { isDark, toggleTheme } = useTheme()
-const { vaults, connected, openModal, readOnly } = useConfig()
+const { vaults, openSource } = useConfig()
 
 const searchInput = ref(null)
 
 /**
- * 顶栏仓库标识。
- * 只反映**真正配置过**（填了 Owner + Repo）的仓库 —— 不能直接用 `form`，
- * 因为 form 初始值来自代码里的默认配置，会让访客看到他从没配过的仓库名。
- * 注意：公开仓库的名称显示出来是正常的（本来就是给所有人看的）。
+ * 顶栏仓库标识。仓库名显示出来是正常的 —— 它本来就是公开仓库，
+ * 也正是访客要读取的那个。两个页签指向同一仓库时只显示一次。
  */
 const repoLabel = computed(() => {
   const list = vaults.value.filter((v) => v.owner && v.repo)
   if (!list.length) return '未配置仓库'
-  // 多个页签指向同一个仓库（技术/算法共用公开展示仓库）→ 显示仓库名更有信息量
   const repos = [...new Set(list.map((v) => `${v.owner}/${v.repo}`))]
   if (repos.length === 1) return repos[0]
   return list.map((v) => v.label).join(' + ')
@@ -37,10 +35,6 @@ const repoLabel = computed(() => {
 
 async function onSync() {
   await ws.refresh()
-}
-
-function onPickFiles() {
-  emit('pick-files')
 }
 
 function onKeydown(e) {
@@ -79,13 +73,12 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
           <div class="flex items-center gap-1.5 text-sm font-semibold">
             笔记收纳与打卡
             <span
-              v-if="readOnly"
               class="rounded border border-[var(--app-border)] px-1 text-[10px] font-normal muted"
-              title="公开只读模式：任何访客都能查看笔记；填入 Token 后才可修改"
+              title="本站是只读的笔记查看器：任何访客都能查看，但页面上不做任何修改"
             >只读</span>
           </div>
-          <button class="flex items-center gap-1 text-[11px] muted hover:underline" @click="openModal">
-            <AppIcon :name="connected ? 'cloud' : 'cloud-off'" :size="11" />
+          <button class="flex items-center gap-1 text-[11px] muted hover:underline" @click="openSource">
+            <AppIcon name="cloud" :size="11" />
             {{ repoLabel }}
           </button>
         </div>
@@ -126,37 +119,16 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
           <span class="hidden sm:inline">{{ ws.syncing.value ? '同步中' : '同步' }}</span>
         </button>
 
-        <button class="btn btn-sm btn-primary" :disabled="readOnly" :title="readOnly ? '只读模式：填入 Token 后才能新建' : '新建笔记'" @click="ws.openCreate()">
-          <AppIcon name="plus" :size="14" />
-          <span class="hidden sm:inline">新建</span>
-        </button>
-
-        <button class="btn btn-sm" :disabled="readOnly" :title="readOnly ? '只读模式：填入 Token 后才能导入' : '导入本地 Markdown'" @click="onPickFiles">
-          <AppIcon name="upload" :size="14" />
-          <span class="hidden md:inline">导入</span>
-        </button>
-
         <button class="btn btn-sm" :disabled="ws.exporting.value" title="打包导出全部笔记 (zip)" @click="ws.exportZip()">
           <AppIcon :name="ws.exporting.value ? 'loader' : 'package'" :size="14" />
           <span class="hidden md:inline">导出</span>
-        </button>
-
-        <button
-          class="btn btn-sm"
-          :class="ws.checkins.checkedToday.value ? 'border-[#1f883d] text-[#1f883d]' : ''"
-          :disabled="ws.checkins.checkedToday.value || readOnly"
-          :title="readOnly ? '只读模式：填入 Token 后才能打卡' : ws.checkins.checkedToday.value ? '今日已打卡（每天仅限一次）' : '今日一键打卡'"
-          @click="ws.checkins.checkIn(1)"
-        >
-          <AppIcon name="flame" :size="14" />
-          <span class="hidden sm:inline">{{ ws.checkins.checkedToday.value ? '已打卡' : ws.checkins.todayCount.value }}</span>
         </button>
 
         <button class="btn btn-sm" :title="isDark ? '切换到浅色' : '切换到深色'" @click="toggleTheme">
           <AppIcon :name="isDark ? 'sun' : 'moon'" :size="14" />
         </button>
 
-        <button class="btn btn-sm" title="连接设置" @click="openModal">
+        <button class="btn btn-sm" title="数据来源" @click="openSource">
           <AppIcon name="sliders" :size="14" />
         </button>
       </div>

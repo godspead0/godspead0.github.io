@@ -17,10 +17,10 @@ const ws = useWorkspace()
 
 const categoryColor = computed(() => ws.categories.colorFor(props.note?.category || '未分类', 'category'))
 
-/** 用「这篇笔记所属的仓库」拼 GitHub 链接（多仓库下不能只看当前表单） */
+/** 用「这篇笔记所属的仓库」拼 GitHub 链接（多仓库下不能只看当前页签） */
 const noteVault = computed(() => {
   const list = ws.config.vaults.value
-  return list.find((v) => v.id === props.note?.vault) || ws.config.primaryVault.value || ws.config.form
+  return list.find((v) => v.id === props.note?.vault) || ws.config.primaryVault.value
 })
 const githubUrl = computed(() => {
   const { owner, repo, branch } = noteVault.value || {}
@@ -73,12 +73,9 @@ const minutes = computed(() => readingMinutes(props.note?.body))
           <MarkdownPreview :content="note.body" />
         </div>
 
-        <!-- 底部操作 -->
+        <!-- 底部操作（只读：编辑 / 删除已移除，仅保留导出类动作） -->
         <div class="flex flex-wrap items-center gap-2 border-t border-[var(--app-border)] px-4 py-3">
-          <button class="btn btn-sm btn-primary" @click="ws.openEdit(note)">
-            <AppIcon name="edit" :size="13" /> 编辑
-          </button>
-          <button class="btn btn-sm" @click="ws.exportOne(note)">
+          <button class="btn btn-sm btn-primary" @click="ws.exportOne(note)">
             <AppIcon name="download" :size="13" /> 下载 .md
           </button>
           <button class="btn btn-sm" @click="ws.copyRaw(note)">
@@ -94,9 +91,6 @@ const minutes = computed(() => readingMinutes(props.note?.body))
             <AppIcon name="github" :size="13" /> 在 GitHub 查看
           </a>
           <span class="ml-auto font-mono text-[10px] muted">sha: {{ (note.sha || '').slice(0, 7) || '-' }}</span>
-          <button class="btn btn-sm btn-danger" @click="ws.removeNote(note)">
-            <AppIcon name="trash" :size="13" /> 删除
-          </button>
         </div>
       </div>
     </div>

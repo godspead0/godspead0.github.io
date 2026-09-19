@@ -1,32 +1,24 @@
 /**
- * 打卡（Check-in）Composable
+ * 打卡（Check-in）Composable —— 只读
  * ---------------------------------------------------------------
  * 数据文件： checkins.json
  * 数据格式： { "YYYY-MM-DD": count, ... }
  *
- * 写入策略（关键）：
- *   每次打卡前先拉取远端最新 JSON 与 sha，在内存中 +1 后立刻提交，
- *   避免"本地旧快照覆盖远端新数据"。若遇 409 冲突，自动重试一次。
- *   同一日期内的多次打卡做 1.2s 合并（debounce），减少 commit 噪声。
+ * 本站只**读取**打卡记录用于渲染热力图与统计。
+ * 原先的写入逻辑（+1 / 撤销 / 补卡 / 409 冲突重试 / 1.2s 合并提交）
+ * 已全部移除 —— 网页端不再向 GitHub 发起任何写请求。
  */
 import { computed, ref } from 'vue'
-import { GithubError, getFile, saveFile } from '../services/github.js'
+import { GithubError, getFile } from '../services/github.js'
 import { toDateKey } from '../services/notes.js'
 import { toast } from './useToast.js'
 import { useConfig } from './useConfig.js'
 
 const CHECKINS_PATH = 'checkins.json'
-const FLUSH_DELAY = 1200
 
 const data = ref({}) // { 'YYYY-MM-DD': number }
-const sha = ref('')
 const loading = ref(false)
-const checkedToday = ref(false)
 const lastError = ref('')
-const retryAfter = ref(0) // 409 冲突重试计数
-
-let flushTimer = null
-let pendingDelta = 0
 
 /* ---------------------------------------------------------------- */
 /* 本地缓存：先用 localStorage 秒开热力图，再与远端对齐                */
@@ -51,8 +43,8 @@ function writeCache(value) {
 }
 
 /**
- * 彻底抹除本机打卡数据（内存 + localStorage）
- * 用于「清除凭据」：避免别人在共用电脑上从缓存读到你的打卡记录。
+ * 彻底抹除本机打卡缓存（内存 + localStorage）
+ * 用于「清除站点数据」：缓存里是公开笔记的副本，本身不敏感，清掉只是不留痕。
  */
 function purge() {
   try {
@@ -61,8 +53,6 @@ function purge() {
     /* 存储不可用时无需清理 */
   }
   data.value = {}
-  sha.value = ''
-  checkedToday.value = false
   lastError.value = ''
 }
 
@@ -133,14 +123,11 @@ async function load(opts = {}) {
     if (remote) {
       const parsed = JSON.parse(remote.content || '{}')
       data.value = parsed && typeof parsed === 'object' ? parsed : {}
-      sha.value = remote.sha
       writeCache(data.value)
     } else {
-      // 文件不存在：视为空记录，首次打卡时会自动创建
+      // 文件不存在：视为空记录（本站只读，不会去创建它）
       data.value = {}
-      sha.value = ''
     }
-    checkedToday.value = todayCount.value > 0
     if (!opts.silent) {
       const n = activeDays.value
       if (n) toast.info(`已载入打卡记录：累计 ${totalCheckins.value} 次 / ${n} 天`)
@@ -159,141 +146,14 @@ function hydrateFromCache() {
   const cached = readCache()
   if (cached && typeof cached === 'object') {
     data.value = { ...cached, ...data.value }
-    checkedToday.value = todayCount.value > 0
   }
-}
-
-/**
- * 提交打卡数据到 GitHub
- * @param {number} attempt 内部重试计数
- */
-async function flush(attempt = 0) {
-  if (pendingDelta === 0) return true
-
-  const delta = pendingDelta
-  pendingDelta = 0
-  const snapshot = { ...data.value }
-  const vault = useConfig().primaryVault.value
-
-  try {
-    const { sha: newSha } = await saveFile(
-      CHECKINS_PATH,
-      JSON.stringify(snapshot, null, 2),
-      sha.value || undefined,
-      `checkin: +${delta} (${today.value})`,
-      vault,
-    )
-    sha.value = newSha
-    writeCache(snapshot)
-    checkedToday.value = todayCount.value > 0
-    return true
-  } catch (err) {
-    // 3600 冲突：远端被别处更新，重新拉取后合并重试一次
-    if (err instanceof GithubError && (err.status === 409 || err.status === 422) && attempt < 2) {
-      try {
-        const remote = await getFile(CHECKINS_PATH, vault)
-        if (remote) {
-          const remoteData = JSON.parse(remote.content || '{}')
-          // 合并：逐日取较大值，防止本地回退远端
-          const merged = { ...remoteData }
-          for (const [k, v] of Object.entries(snapshot)) {
-            merged[k] = Math.max(Number(merged[k] || 0), Number(v) || 0)
-          }
-          data.value = merged
-          sha.value = remote.sha
-        } else {
-          sha.value = ''
-        }
-        pendingDelta += delta
-        retryAfter.value = attempt + 1
-        return await flush(attempt + 1)
-      } catch {
-        pendingDelta += delta
-      }
-    }
-    pendingDelta += delta // 失败回滚增量，等待下次重试
-    const message = err instanceof GithubError ? err.message : err?.message || '打卡提交失败'
-    lastError.value = message
-    toast.error(`打卡同步失败：${message}`)
-    return false
-  }
-}
-
-/** 延迟合并提交 */
-function scheduleFlush() {
-  if (flushTimer) clearTimeout(flushTimer)
-  flushTimer = setTimeout(() => {
-    flushTimer = null
-    flush()
-  }, FLUSH_DELAY)
-}
-
-/**
- * 打卡 +n
- * @param {number} n
- * @param {{silent?: boolean, date?: string}} [opts]
- */
-async function checkIn(n = 1, opts = {}) {
-  const key = opts.date || today.value
-  // 每天只能打一次卡：今天已打卡则拒绝再次打卡（手动与自动均生效）
-  if (key === today.value && Number(data.value[key] || 0) > 0) {
-    if (!opts.silent) toast.info('今日已打卡，每天仅限一次')
-    return false
-  }
-  data.value = { ...data.value, [key]: Number(data.value[key] || 0) + n }
-  pendingDelta += n
-  checkedToday.value = todayCount.value > 0
-
-  if (opts.silent) {
-    scheduleFlush()
-    return true
-  }
-  const ok = await flush()
-  if (ok) toast.success(`打卡成功！今日第 ${Number(data.value[key] || 0)} 次 🎉`)
-  return ok
-}
-
-/** 撤销今日打卡（减 1，最低 0） */
-async function undoToday() {
-  const key = today.value
-  const current = Number(data.value[key] || 0)
-  if (current <= 0) {
-    toast.info('今天还没有打卡记录')
-    return false
-  }
-  data.value = { ...data.value, [key]: current - 1 }
-  pendingDelta -= 1
-  const ok = await flush()
-  if (ok) toast.info(`已撤销 1 次打卡，今日剩余 ${data.value[key]} 次`)
-  return ok
-}
-
-/**
- * 设置某天次数（用于手动校正）
- */
-async function setDay(dateKey, count) {
-  const value = Math.max(0, Number(count) || 0)
-  const prev = Number(data.value[dateKey] || 0)
-  data.value = { ...data.value, [dateKey]: value }
-  pendingDelta += value - prev
-  return flush()
-}
-
-/** 笔记创建/修改时自动触发的静默打卡（不弹成功提示，失败也不打断主流程） */
-function autoCheckIn(reason = '笔记更新') {
-  return checkIn(1, { silent: true }).then((ok) => {
-    if (ok) toast.info(`已自动打卡 +1（${reason}）`)
-  })
 }
 
 export function useCheckins() {
   return {
     data,
-    sha,
     loading,
-    checkedToday,
     lastError,
-    retryAfter,
     today,
     todayCount,
     totalCheckins,
@@ -302,11 +162,6 @@ export function useCheckins() {
     longestStreak,
     load,
     hydrateFromCache,
-    checkIn,
-    undoToday,
-    setDay,
-    autoCheckIn,
-    flush,
     purge,
   }
 }

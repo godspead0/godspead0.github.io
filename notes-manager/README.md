@@ -1,11 +1,13 @@
 # 笔记收纳与打卡系统（notes-manager）
 
-部署在 **GitHub Pages**（`https://godspead0.github.io`）的**个人在线笔记收纳与打卡系统**。
+部署在 **GitHub Pages**（`https://godspead0.github.io`）的**个人在线笔记查看器**。
 
-核心机制：**纯前端 SPA + GitHub REST API**。网站没有自建后端，浏览器直连 GitHub ——
-**有 Token 时**用 Contents API 双向同步笔记、打卡与分类元数据；
-**没有 Token 时**（访客）改走 `raw.githubusercontent.com` 匿名只读，
-正文读取不计入 API 额度，且写操作在服务层就被拦下。
+核心机制：**纯前端 SPA + GitHub 只读 REST API**。网站没有自建后端，浏览器直连 GitHub ——
+用 Git Trees API 取一次文件树，笔记正文走 `raw.githubusercontent.com`（CDN，不计入 API 额度）。
+
+> **本站是纯只读的。** 页面上没有新建 / 编辑 / 删除 / 导入 / 打卡入口，
+> 也不存在 Token 输入框或 `localStorage` 凭据 —— 打开即看，关掉什么都不留。
+> 内容在本地写好，由 `提交笔记.bat` 单向镜像到公开展示仓库。
 
 - 站点源码：本仓库 `your-name/godspead0.github.io`（用户站点仓库，发布在**站点根路径**）
 - 访问地址：`https://godspead0.github.io/`
@@ -18,10 +20,6 @@
 > 公开展示仓库 `godspead0_notes1` 本身就是公开的，所以直接写出来：
 > 它必须公开，否则访客读不到内容。
 
-> **只读模式**：站点代码里预填了公开展示仓库，因此访客**无需任何配置**即可浏览；
-> 顶栏会显示「只读」徽标，新建 / 导入 / 打卡按钮禁用。
-> 填上 Token 才切换为可写模式。
-
 > Vite 已配置 `base: './'`（相对路径），因此无论发布在根路径还是 `/<repo>/` 子路径下都能正常加载资源。
 
 ---
@@ -30,17 +28,16 @@
 
 | 模块 | 能力 |
 | --- | --- |
-| 连接与鉴权 | **多仓库（技术 / 算法）** 各自配置 Owner / Repo / Branch / 笔记目录 / PAT，逐仓连通性测试，凭据存 `localStorage`，支持清除 |
-| 多仓库聚合 | 一次同步拉取全部已配置仓库，按**仓库（一级分类）→ 分类 → 标签**聚合；侧栏可只看某个仓库 |
-| 笔记管理 | 新建 / 编辑 / 删除 / 改名（自动重命名文件）、Markdown 实时预览、分栏编辑、下载单篇 `.md` |
-| 批量导入 | 拖拽（支持整个文件夹递归收集）或选择本地 `.md` / `.markdown` / `.txt`，自动解析 frontmatter |
-| 导出备份 | 单篇下载、多选导出、全站打包 `zip`（含 `全栈/`、按年月归档目录、`checkins.json`、`categories.json`） |
-| 分类与标签 | 每篇笔记绑定 Category + 多个 Tags；侧边栏实时筛选树（分类 / 标签云 / 未分类），多标签为 AND 语义 |
+| 零配置 | 数据源固定在 `useConfig.js` 的 `PUBLIC_*` 常量；访客打开即读，无需登录 |
+| 多分类聚合 | 一次同步拉取全部分类目录，按**分类（一级）→ 分类文件夹 → 标签**聚合；侧栏可只看某一类 |
+| 笔记浏览 | Markdown 渲染（DOMPurify 消毒）、目录锚点、字数 / 阅读时长估算 |
+| 导出备份 | 单篇下载、复制 Markdown 原文、多选导出、全站打包 `zip`（含 `checkins.json`、`categories.json`） |
+| 分类与标签 | 侧边栏实时筛选树（分类 / 标签云 / 未分类），多标签为 AND 语义；颜色按名字哈希稳定推导 |
 | 时间线归档 | 按「年份-月份」自动分组并折叠，形如 `2026年9月 (4)`；侧栏与主列表均支持归档视图 |
 | 搜索 | Fuse.js 对 `title` / `tags` / `category` / `body` 即时模糊全文检索，中文友好 |
 | 排序 | 更新时间 / 创建时间 / 标题，升序或降序一键切换 |
 | 打卡热力图 | SVG 实现的 GitHub Contribution Graph：7 行 × N 周（12 / 26 / 53 周可切换）、5 级色阶、月份刻度、悬停浮层、点击查看某日 |
-| 打卡联动 | 「今日一键打卡」（**每天仅限一次**，已打卡后按钮置灰）、撤销、补卡；**新建 / 修改 / 导入笔记时自动当日 +1**（异步、静默、失败不打断主流程） |
+| 打卡热力图 | GitHub 风格 SVG 贡献图（7 行 × N 周，4 级绿色），**只读展示** `checkins.json`；页面上没有打卡 / 撤销 / 补卡入口 |
 | 主题 | 浅色 / 深色手动切换（`html.dark`），首次访问跟随系统 |
 | 异常处理 | 401 / 403 限频 / 404 / 409 冲突 / 422 / 5xx / 超时 / 断网，全部归一化为中文可读提示 |
 
@@ -59,7 +56,7 @@
 | Markdown | marked 12（解析）+ DOMPurify 3（XSS 消毒，fail-closed） |
 | 导出 | `FileReader`（读取本地文件）/ `Blob`（单篇下载）/ JSZip（全站打包） |
 | 本地缓存 | `localStorage`（凭据、主题、打卡记录预热缓存） |
-| 测试 | `scripts/smoke.mjs`（Vite SSR + Node，131 项断言，无需浏览器） |
+| 测试 | `scripts/smoke.mjs`（Vite SSR + Node，153 项断言，无需浏览器） |
 
 ---
 
@@ -84,36 +81,32 @@ notes-manager/
     ├── App.vue                      # 根组件：三栏布局 + 全局浮层编排
     ├── index.css                    # Tailwind 入口、CSS 变量主题、Markdown 排版
     ├── services/                    # ① 与外界打交道的纯逻辑层（无 Vue 依赖）
-    │   ├── github.js                #    GitHub Contents API：UTF-8 Base64、SHA、错误映射、递归列目录
+    │   ├── github.js                #    GitHub 只读客户端：Git Trees 列目录、raw CDN 读正文、错误映射
     │   ├── notes.js                 #    领域模型：id/slug/path、frontmatter 化笔记、日期与统计工具
     │   ├── frontmatter.js           #    零依赖 YAML 子集解析 / 序列化
-    │   ├── exporter.js              #    FileReader 导入、Blob 下载、JSZip 打包
+    │   ├── exporter.js              #    Blob 下载、JSZip 打包
     │   └── markdown.js              #    marked + DOMPurify 渲染（不可用时降级为纯文本）
     ├── composables/                 # ② 状态与业务编排层（模块级单例，天然全局状态）
-    │   ├── useConfig.js             #    凭据读写、表单校验、连通性测试
-    │   ├── useNotes.js              #    笔记拉取/新建/更新/删除/批量上传（sha 级缓存 + 并发限制）
-    │   ├── useCheckins.js           #    checkins.json 读写、连续天数统计、写入合并与 409 重试
-    │   ├── useCategories.js         #    categories.json 读写、颜色散列、按笔记自动补登记
+    │   ├── useConfig.js             #    只读数据源（PUBLIC_OWNER / PUBLIC_REPO / PUBLIC_BRANCH）
+    │   ├── useNotes.js              #    笔记拉取（sha 级缓存 + 并发限制 + 文件树缓存）
+    │   ├── useCheckins.js           #    checkins.json 读取、连续天数统计
+    │   ├── useCategories.js         #    categories.json 读取、颜色散列
     │   ├── useSearch.js             #    Fuse 索引、分类/标签/年月筛选、排序、筛选树推导
-    │   ├── useWorkspace.js          #    应用级编排：三路并行同步、编辑器状态机、导入导出动作
+    │   ├── useWorkspace.js          #    应用级编排：并行同步、详情浮层、导出动作
     │   ├── useTheme.js              #    浅色/深色主题
-    │   ├── useToast.js              #    全局轻提示
-    │   └── useConfirm.js            #    Promise 化确认弹窗
+    │   └── useToast.js              #    全局轻提示
     └── components/                  # ③ 视图层
-        ├── AppHeader.vue            #    顶栏：搜索、同步、新建、导入、导出、打卡、主题、设置
+        ├── AppHeader.vue            #    顶栏：搜索、同步、导出、主题、数据来源
         ├── FilterSidebar.vue        #    侧栏筛选树（分类 / 标签 / 时间线归档），移动端抽屉
-        ├── NoteListPanel.vue        #    列表：工具栏、批量操作、卡片视图 / 归档视图、空态与骨架屏
+        ├── NoteListPanel.vue        #    列表：工具栏、批量导出、卡片视图 / 归档视图、空态与骨架屏
         ├── NoteCard.vue             #    笔记卡片
-        ├── DashboardPanel.vue       #    仪表盘：打卡主卡片、热力图、区间切换、统计指标
+        ├── DashboardPanel.vue       #    仪表盘：热力图、区间切换、统计指标（全部只读）
         ├── ContributionGraph.vue    #    ★ SVG 点阵打卡热力图
-        ├── NoteEditorModal.vue      #    编辑器：元数据、Markdown 工具栏、编辑/预览/分栏
         ├── NoteDetailModal.vue      #    阅读视图：渲染正文 + 元数据 + GitHub 原文链接
-        ├── ConfigModal.vue          #    连接设置弹窗
-        ├── ImportOverlay.vue        #    全局拖拽导入浮层（含文件夹递归）
+        ├── SourceModal.vue          #    「数据来源」信息弹窗
         ├── MarkdownPreview.vue      #    安全渲染容器
         ├── AppIcon.vue              #    内联 SVG 图标集（零图标库依赖）
-        ├── ToastHost.vue            #    提示浮层
-        └── ConfirmDialog.vue        #    确认弹窗
+        └── ToastHost.vue            #    提示浮层
 ```
 
 数据流是单向的：`services`（纯逻辑） ← `composables`（状态与副作用） ← `components`（视图）。
@@ -123,57 +116,53 @@ notes-manager/
 
 ## 4. 数据仓库结构
 
-笔记数据存放在**站点源码仓库之外的独立仓库**里，网站支持**多个仓库聚合**（vault），
-每个仓库在「连接设置」里有独立页签。默认的两个页签指向**同一个公开展示仓库**的不同子目录：
+笔记数据存放在**站点源码仓库之外的一个公开仓库**里。网站内部仍保留「多 vault 聚合」的结构，
+默认的两个 vault 指向**同一个公开展示仓库**的不同子目录：
 
-| 页签 | 仓库 | 分支 | 笔记目录 |
+| 分类 | 仓库 | 分支 | 笔记目录 |
 | --- | --- | --- | --- |
 | 技术 | `godspead0_notes1`（公开） | `main` | `全栈/` |
 | 算法 | `godspead0_notes1`（公开） | `main` | `算法/` |
 
-> 两个页签指向同一仓库时，**文件树只请求一次**（按 `owner/repo@branch` 缓存 60 秒），
+> 两个分类指向同一仓库时，**文件树只请求一次**（按 `owner/repo@branch` 缓存 60 秒），
 > 因为匿名访客每小时只有 60 次 API 额度。
 
-网站里 **一级分类 = 仓库（技术 / 算法）**，二级才是分类文件夹。
+网站里 **一级分类 = vault（技术 / 算法）**，二级才是分类文件夹。
 
 ```text
 godspead0_notes1/             # 公开展示仓库（public）· 网站展示的就是它
-├── 全栈/                      # ★ 技术笔记根目录（页签「技术」只扫描这里）
+├── 全栈/                      # ★ 技术笔记根目录（分类「技术」只扫描这里）
 │   ├── 前端部分/Vue.md        # 按分类建文件夹，文件夹名 = 笔记分类
 │   ├── 后端部分/spring框架/SpringBoot.md
-│   ├── 术语解释.md            # 散落在 全栈/ 下的单篇笔记（无分类）
-│   └── {id}_{slug}.md         # 在网站里新建的笔记（带 frontmatter）
-├── 算法/                      # ★ 算法笔记根目录（页签「算法」只扫描这里）
-├── checkins.json              # { "YYYY-MM-DD": count, ... }（自动创建，主仓库根目录）
-└── categories.json            # 分类与标签元数据（自动创建，主仓库根目录）
+│   └── 术语解释.md            # 散落在 全栈/ 下的单篇笔记（无分类）
+├── 算法/                      # ★ 算法笔记根目录（分类「算法」只扫描这里）
+│   └── 力扣/二分查找.md       # ← 镜像自私有工作区的 笔记/ 目录
+├── checkins.json              # { "YYYY-MM-DD": count, ... }（可选，热力图数据源）
+└── categories.json            # 分类 / 标签配色元数据（可选）
 ```
 
-镜像来源是私有工作区，`origin/` 里的代码 / 图片不会被复制过去：
+镜像来源是私有工作区，代码文件不会被复制过去（只复制 `.md` / `.markdown`）：
 
 ```text
-my-tech-notes/          # 私有工作区 · 默认分支 master
-└── 全栈/                      # ★ 唯一的镜像来源（只复制 .md）
-    └── ...
+my-tech-notes/                 # 私有工作区 · 默认分支 master
+└── 全栈/                      # ★ 唯一镜像来源
+    └── 前端部分/Vue.md  ...
 
-my-algo-notes/          # 私有工作区 · 默认分支 main
-└── ...                        # 根目录下的 .md → 镜像到公开仓库的 算法/
+my-algo-notes/                 # 私有工作区 · 默认分支 main
+├── 力扣/ 洛谷/ acwing/ ...    # 代码目录（.cpp / .prob），镜像时忽略
+└── 笔记/                      # ★ 唯一镜像来源 → 公开仓库的 算法/
+    └── 力扣/二分查找.md
 ```
 
-my-algo-notes-dir/                # 算法笔记 · 默认分支 main
-├── 力扣/ 洛谷/ 牛客/ ...      # ★ 笔记与题解（文件夹名 = 笔记分类）
-└── {id}_{slug}.md             # 在网站里新建的算法笔记会落在仓库根目录
-```
+> 算法的镜像来源是 `笔记/` 而**不是仓库根目录** —— 根下还有 `力扣/` `洛谷/` 等代码目录，
+> 限定在 `笔记/` 更清晰（虽然有 `.md` 过滤兜底，扫根目录也不会误传代码）。
 
 > **只展示 `.md` / `.markdown`**，其他类型（`.cpp`、`.prob`、`.json`、`.png` 等）一律不展示。
-> 技术仓库因为有「笔记目录 = `全栈`」，扫描范围**限定在该子树内**；
-> 算法仓库的「笔记目录」留空，等于扫描**整个仓库**里的全部 `.md`——
-> 若想限定范围，把该页签的笔记目录填成具体文件夹名（如 `笔记`）即可。
-> **打卡记录 `checkins.json` 与 `categories.json` 存放在第一个已配置的仓库的根目录**（通常是技术仓库）。
+> 两个分类的扫描范围都被「笔记目录」限死在各自的子树内，因此互不重叠。
 
-### 4.1 笔记文件 `{id}_{slug}.md`
+### 4.1 笔记文件格式
 
-- `id`：13 位毫秒时间戳，天然按时间排序且几乎不会冲突
-- `slug`：标题转写，**保留中文**，仅剔除 `\/:*?"<>|` 等文件系统非法字符
+网站不关心文件名，只认内容。带 frontmatter 的 `.md`：
 
 ```markdown
 ---
@@ -190,8 +179,12 @@ updated: "2026-09-02T03:30:00.000Z"
 正文内容……
 ```
 
+- `id`：13 位毫秒时间戳（历史遗留命名 `{id}_{slug}.md` 仍能正常解析）
+- `slug`：标题转写，**保留中文**，仅剔除 `\/:*?"<>|` 等文件系统非法字符
+
 `frontmatter` 是唯一事实来源：`category` / `tags` 直接决定筛选归属，
-所以 `categories.json` 丢失也不会导致筛选不可用（UI 会依据笔记自动推导并补登记）。
+所以 `categories.json` 丢失也不会导致筛选不可用（颜色按名字哈希稳定推导）。
+**分类也可以完全不带 frontmatter** —— 会退化为「一级子文件夹名」。
 
 ### 4.2 `checkins.json`
 
@@ -199,21 +192,22 @@ updated: "2026-09-02T03:30:00.000Z"
 { "2026-09-19": 2, "2026-09-18": 1 }
 ```
 
-### 4.3 快速初始化数据仓库
+存在就渲染热力图，不存在就显示空白。**网站只读不写**，要改就在 GitHub 网页上编辑。
+
+### 4.3 换个数据仓库
 
 1. 在 GitHub 上创建一个**公开**的笔记仓库（本站用 `godspead0_notes1`）——
-   **必须公开**，否则匿名访客读不到；把 `examples/data-repo/` 下的示例文件传进去（可选，不传也能用）；
-2. 在 `src/composables/useConfig.js` 里把 `PUBLIC_OWNER` / `PUBLIC_REPO` / `PUBLIC_BRANCH`
-   改成你的仓库，两个页签的 `notesDir` 分别是 `全栈` 与 `算法`；
-3. 普通访客到这里就结束了 —— 打开网站即可只读浏览；
-4. **要写入权限**（新建 / 编辑 / 删除 / 打卡）才需要 Token：
-   在「连接设置」两个页签的 Token 栏各粘贴一次，权限选 `Contents: Read and write`。
-   网站内新建的笔记按当前所选仓库写入：
-   技术页签 → <code class="font-mono">全栈/{id}_{slug}.md</code>；
-   算法页签 → <code class="font-mono">算法/{id}_{slug}.md</code>。
+   **必须公开**，否则匿名访客读不到；
+2. 改 `src/composables/useConfig.js` 里的三个常量：
 
-> 私有工作区（本机编辑用）通过 `提交笔记.bat` 的镜像步骤单向同步到公开仓库，
-> 网站**不直接读**私有仓库，因此访客只需要公开仓库的读取权限。
+   ```js
+   const PUBLIC_OWNER  = 'godspead0'
+   const PUBLIC_REPO   = 'godspead0_notes1'
+   const PUBLIC_BRANCH = 'main'
+   ```
+
+3. 两个分类的 `notesDir` 分别是 `全栈` 与 `算法`（按需改）；
+4. 重新构建并推送站点源码即可。**不需要任何 Token。**
 
 ---
 
@@ -226,75 +220,72 @@ npm install
 npm run dev       # 开发服务器 http://localhost:5173
 npm run build     # 产物输出到 dist/
 npm run preview   # 本地预览构建产物 http://localhost:4173
-npm run smoke     # 冒烟测试（131 项断言，无浏览器依赖）
+npm run smoke     # 冒烟测试（153 项断言，无浏览器依赖）
 npm run verify    # build + smoke
 ```
 
-打开网站即可**只读浏览**（站点代码已预填公开展示仓库，访客无需任何配置）。
-要写入时点右上角「连接设置」，在「技术 / 算法」两个页签的 **Token** 栏各粘贴一次
-（Owner / Repo / Branch / 笔记目录 已预填、保持不动），各自点「测试并保存」。
+打开网站即可浏览（站点代码已预填公开展示仓库，无需任何配置）。
+换数据源请改 `src/composables/useConfig.js` 里的 `PUBLIC_*` 常量。
 
 ---
 
 ## 6. 凭据与安全
 
-**Token 只保存在当前浏览器的 `localStorage`**，请求直连 `api.github.com`，不经过任何第三方服务器。
-但浏览器端的 PAT 仍是敏感信息，务必遵守：
+**本站不持有任何凭据。**
 
-- 优先使用 **Fine-grained token**：`Repository access` 只勾选**公开展示仓库**，
-  权限只给 **Contents: Read and write**（`Metadata: Read` 会自动附带）；
-  网站不读私有工作区，因此**不必**授权那些仓库；
-- 老式经典 Token 需要 `repo` 作用域；
-- **不要在公共电脑上使用**；用完点「清除凭据」，或直接使用浏览器的访客模式；
-- Token 泄露后立即到 GitHub Settings 吊销。
+- 没有 Token 输入框
+- 没有「测试连接」「保存配置」
+- 不把任何密钥写进 `localStorage`
+- 只向 `api.github.com`（取文件树）与 `raw.githubusercontent.com`（取正文）发**读**请求
 
-> **访客没有 Token**，因此写操作在服务层就被拒绝（`saveFile` / `deleteFile` 会抛
-> `NO_TOKEN`「当前是只读模式」），前端禁用按钮只是提示，不是唯一防线。
+因此不存在「XSS 偷 Token」这条攻击链。Markdown 渲染仍走 `marked` + `DOMPurify`
+**fail-closed**（消毒器不可用则拒绝渲染），阻断 XSS 本身。
 
-### 6.1 本机缓存与「清除凭据」
+> 服务层的 `github.js` 保留了 `saveFile` / `deleteFile` 及其 `requireToken()` 守卫
+> （无 Token 时抛 `NO_TOKEN`「当前是只读模式」）。应用层已无任何调用点 ——
+> 守卫留在这里是为了万一将来重新引入写路径时不会静默地写出去，
+> 冒烟测试也对此有断言。
 
-为让首屏秒开，笔记正文与打卡记录会缓存在 `localStorage`。这意味着
-**只清 Token 并不足以保护共用电脑上的数据** —— 别人仍能从缓存里读到全部笔记。
+### 6.1 本机缓存
 
-因此「清除凭据」会一并抹除下列全部键，并清空内存状态：
+为让首屏秒开，笔记正文与打卡记录会缓存在 `localStorage`：
 
 | localStorage 键 | 内容 |
 | --- | --- |
-| `notes-manager.vaults.v3` | 各仓库配置（含 Token） |
-| `notes-manager.config.v1` | 旧版扁平配置（含 Token，兼容保留） |
 | `notes-manager.notes.v1` | **笔记列表与正文** |
 | `notes-manager.checkins.cache` | 打卡记录预热缓存 |
 
-另有两道防护：
+这些只是**公开笔记的本地副本**，不敏感；清掉只会让下次打开慢一点。
+想清干净直接在浏览器里「清除站点数据」即可。
 
-- **仓库指纹**：笔记缓存里记录写入时的 `owner/repo/branch/笔记目录` 组合。
-  配置变更后指纹不匹配，缓存会被判为「上一个仓库的」并自动丢弃，
-  避免把别的仓库的笔记当成当前的展示（无 `sig` 字段的旧缓存按兼容处理）。
-- **无第三方脚本**：`index.html` 只加载本地 bundle，不引入任何 CDN / 统计脚本，
-  因此不存在第三方脚本读取 `localStorage` 中 Token 的路径。
-  Markdown 渲染走 `marked` + `DOMPurify` **fail-closed**（消毒器不可用则拒绝渲染），
-  以阻断「XSS 偷 Token」这条链。
+**仓库指纹**：笔记缓存里记录写入时的 `owner/repo/branch/笔记目录` 组合。
+配置变更后指纹不匹配，缓存会被判为「上一个仓库的」并自动丢弃，
+避免把别的仓库的笔记当成当前的展示（无 `sig` 字段的旧缓存按兼容处理）。
 
-相关代码：`src/services/github.js`（`loadConfig` / `persistConfig` / `clearConfig`）、
-`src/composables/useConfig.js`（表单校验与连通性测试）。
+相关代码：`src/services/github.js`（`getFile` / `rawFileUrl` / `listFilesViaTree` / `requireToken`）。
 
 ---
 
 ## 7. 关键设计说明
 
-### 7.1 UTF-8 安全的 Base64（中文不乱码）
+### 7.1 UTF-8 安全
 
-`btoa` 只接受 Latin-1，直接传中文会抛 `InvalidCharacterError`。`github.js` 的做法是
-`TextEncoder` → UTF-8 字节 → 分块 `String.fromCharCode` → `btoa`；解码侧用 `atob` +
-`TextDecoder('utf-8')`，并清理 GitHub 返回内容中的换行。
+`btoa` 只接受 Latin-1，直接传中文会抛 `InvalidCharacterError`。写入侧仍保留了
+`TextEncoder` → UTF-8 字节 → 分块 `String.fromCharCode` → `btoa` 的实现；
+读取侧匿名走 raw CDN（纯文本，无需解码），带 Token 时走 Contents API
+（`atob` + `TextDecoder('utf-8')`，并清理 GitHub 返回内容中的换行）。
 
-### 7.2 SHA 乐观锁与并发保护
+### 7.2 只读保证（三道）
 
-GitHub Contents API 更新文件必须携带该文件**当前**的 `sha`：
+1. **UI 层**：新建 / 编辑 / 删除 / 导入 / 打卡的按钮与弹窗组件已删除
+2. **应用层**：`useNotes` / `useCheckins` / `useCategories` / `useWorkspace` 里的
+   写入函数（create / update / remove / uploadLocal / checkIn / persist / …）已移除
+3. **服务层**：`github.js` 的 `saveFile` / `deleteFile` 需要 Token，而站点无法获得 Token，
+   调用即抛 `NO_TOKEN`
 
-- 新建 → 不带 `sha`；更新 → 带 `sha`；
-- 若远端已被别处改动 → 返回 `409`，前端提示「保存冲突，请重新同步后再编辑」；
-- 笔记标题变更时采用「先写新路径、再删旧文件」，避免中间态丢失内容。
+连带移除的还有一个**隐式写**：以前每次同步后会调用 `syncFromNotes()` 把新分类
+补登记进 `categories.json` —— 那意味着**每个访客打开页面都会触发起一次写请求**并失败报错。
+现在分类颜色由 `colorFor()` 按名字哈希稳定推导，不再需要写回。
 
 ### 7.3 限频与并发
 
@@ -305,34 +296,63 @@ GitHub 未认证 60 次/小时、认证 5000 次/小时。前端做了三层收�
 3. **sha 级缓存**：目录列表里 `sha` 未变化的文件直接复用内存中的笔记，不重复下载；
 4. 响应头 `x-ratelimit-remaining: 0` 或 403 + `rate limit` 时，提示具体重置时间。
 
-### 7.4 打卡写入策略（防覆盖）
+### 7.4 分类推断：笔记目录必须由调用方传入
 
-`checkins.json` 是单文件共享状态，最容易出现「本地旧快照覆盖远端新数据」。`useCheckins` 的做法：
+笔记的分类 = **笔记目录之下**的一级子目录名。所以推断前必须先剥掉「笔记目录」前缀：
 
-1. 每次提交**先拉取远端最新 JSON 与 `sha`**，在内存中叠加增量后立即提交；
-2. 同一日期内的连续打卡做 **1.2s debounce 合并**，减少 commit 噪声（自动打卡走这条路径）；
-3. 遇到 `409` / `422` 时重新拉取远端、按日取 `Max` 合并，再重试（最多 2 次）；
-4. 本地 `localStorage` 缓存一份打卡记录，用于首屏秒开热力图，打开后再与远端对齐。
+```
+全栈/前端部分/Vue.md   （root=全栈）→ 分类「前端部分」
+算法/力扣/二分查找.md   （root=算法）→ 分类「力扣」
+```
 
-### 7.5 XSS 防护（fail-closed）
+⚠️ 这里踩过一个坑：早期 `categoryFromPath()` 把 `全栈` **硬编码**在函数里。
+多分类改造后，`算法/力扣/x.md` 因为剥不掉 `算法/`，分类会被算成「算法」本身 ——
+**所有算法笔记的分类树会塌成一层**。
+
+现在的做法是让调用方把 `notesDir` 一路传下去（`parseNoteFile(file, raw, { root })`
+→ `categoryFromPath(path, root)` / `titleFromPath(path, root)`），
+`stripRootDir()` 负责剥前缀，**函数里不再出现任何具体仓库的目录名**。
+冒烟测试对这条有专门的回归断言。
+
+### 7.5 404 不静默：仓库配错要报错，而不是显示 0 篇
+
+`listFiles` 的降级链是「Trees API → 逐层列目录」，两侧都曾把 404 吞掉：
+
+- `listFilesViaTree` 把任何异常都当成「Trees 不可用」→ `return null`
+- `listDir` 把 404 当成「这个目录不存在」→ `return []`
+
+后果是**仓库名写错、或仓库被改成私有时，站点静默显示「0 篇笔记」**，
+用户完全看不出是配置问题。
+
+关键区别：Trees 请求的 URL 是 `/repos/{owner}/{repo}/git/trees/{branch}?recursive=1`，
+**里面没有路径** —— 所以它返回 404 只可能是「仓库或分支不存在 / 不是公开的」，
+不可能是「笔记目录不存在」。因此现在这个 404 直接抛出，
+其它错误（403 限频、超时、网络、结果截断）仍回退递归，功能不退化。
+
+「笔记目录不存在」这种情况交由 `listDir` 继续容忍为 0 篇 —— 那是正常的空分类。
+
+### 7.6 打卡记录只读缓存
+
+`checkins.json` 由网站**读取**用于渲染热力图与统计，本地 `localStorage` 缓存一份
+用于首屏秒开，打开后再与远端对齐。写入逻辑（先拉 `sha` 再叠加增量、1.2s debounce 合并、
+409 冲突按日取 `Max` 重试）已随只读改造一并移除。
+
+### 7.7 XSS 防护（fail-closed）
 
 笔记正文来自远端仓库，可被任何协作者修改，因此渲染前必须经 DOMPurify 消毒。
 若当前环境拿不到可用的消毒器（无 DOM、加载失败、`isSupported === false`），
 `markdown.js` **不会原样输出 HTML**，而是整体降级为转义后的纯文本 —— 宁可少渲染样式，也不允许脚本注入。
 
-### 7.6 错误映射
+### 7.8 错误映射
 
 | 场景 | 用户可见提示 |
 | --- | --- |
-| 401 | Token 无效或已过期，请重新生成 PAT |
-| 403 + rate limit | 触发限频，附额度重置时间 |
-| 403 其它 | 权限不足：确认 Contents 读写权限 |
-| 404 | 仓库 / 路径不存在：检查 Owner / Repo / Branch 与私有仓库授权 |
-| 409 | 文件冲突：远端已被修改，先同步再提交 |
-| 422 | 提交被拒绝（参数校验失败） |
+| 403 + rate limit | 触发限频（匿名 60 次/小时/IP），附额度重置时间 |
+| 403 其它 | 权限不足 / 被拒绝 |
+| 404 | 仓库不存在或不是公开的（见 §7.5） |
 | 5xx | GitHub 服务端异常，请稍后重试 |
 | 超时（20s） | 请求超时：网络较慢或被代理拦截 |
-| 网络异常 | 无法连接 api.github.com：检查网络 / VPN / 广告拦截 |
+| 网络异常 | 无法连接 api.github.com / raw.githubusercontent.com |
 
 所有错误都抛出自定义 `GithubError`，带 `code` 与 `status`，UI 层据此给出针对性提示。
 
@@ -380,22 +400,34 @@ npx serve dist        # 或任意静态服务器；预览时同样是相对路�
 ## 9. 测试
 
 ```bash
-npm run smoke                  # 离线：131 项断言
-SMOKE_NETWORK=1 npm run smoke  # 额外向 api.github.com 发 1 次请求，验证错误映射
+npm run smoke                  # 离线：153 项断言
+SMOKE_NETWORK=1 npm run smoke  # 联网：159 项断言，会以匿名身份读一次真实数据源
 ```
 
 `scripts/smoke.mjs` 用 Vite 的 `ssrLoadModule` 在 Node 中加载真实源码，覆盖：
 
 1. **服务层纯函数**：UTF-8 Base64 往返（中文 / emoji）、frontmatter 解析与序列化往返、
-   slug / path / 日期键 / 归档标题；
-2. **搜索与筛选**：Fuse 命中标题与正文、分类 / 标签 / 年月筛选、排序、筛选树计数与归档分组；
-3. **整棵组件树 SSR 渲染**：未配置态、注入数据后的列表 / 侧栏 / 仪表盘 / 热力图（断言 26 周 = 182 个单元格）、
-   编辑器新建与编辑、阅读视图、搜索空态 —— 任何模板或响应式引用错误都会让断言失败；
-4. **Markdown 与 XSS**：`<script>`、内联事件、`javascript:` 链接均不得出现在输出中；
-5. **联网检查（可选）**：无效 Token 必须被归一化为 `BAD_CREDENTIALS` + 中文提示。
+   slug / stripRootDir / 日期键 / 归档标题；
+2. **分类推断回归**：多分类下必须按**各自的**笔记目录剥前缀
+   （`算法/力扣/x.md` 的分类是「力扣」而不是「算法」，见 §7.4）；
+3. **导出路径**：算法笔记不会被塞进 `全栈/` 顶层目录（见 §7.4 同类问题）；
+4. **搜索与筛选**：Fuse 命中标题与正文、分类 / 标签 / 年月筛选、排序、筛选树计数与归档分组；
+5. **整棵组件树 SSR 渲染**：注入数据后的列表 / 侧栏 / 仪表盘 / 热力图（断言 26 周 = 182 个单元格）、
+   阅读视图、搜索空态、「数据来源」弹窗 —— 任何模板或响应式引用错误都会让断言失败；
+6. **只读保证**：断言 DOM 里**不存在**新建 / 导入 / 一键打卡 / 补卡 / 批量删除 / 连接设置入口，
+   配置对象里没有 `token` 字段，且服务层 `saveFile` / `deleteFile` 在无 Token 时抛 `NO_TOKEN`；
+7. **限频优化**：桩掉 `fetch` 断言同一仓库的文件树**只请求一次**（命中缓存），
+   且匿名读正文走 `raw.githubusercontent.com` 而非 `api.github.com`；
+8. **错误不再静默**：桩出 404 断言「仓库不存在 / 非公开」会抛错，而不是返回空列表（见 §7.5）；
+9. **Markdown 与 XSS**：`<script>`、内联事件、`javascript:` 链接均不得出现在输出中；
+10. **联网检查（可选）**：`SMOKE_NETWORK=1` 时以匿名身份读**真实配置的数据源**，
+    验证访客看到的那条路径确实通，并断言 404 归一化为 `NOT_FOUND`。
+
+> 第 10 项依赖你的公开展示仓库是 public。算法分类当前 0 篇时会打印一行说明而不是失败
+> （空分类是正常状态），但合计 0 篇会失败 —— 那说明数据源真的有问题。
 
 > 说明：SSR 断言用于「能否渲染」的静态校验，不能替代浏览器端人工验收；
-> 由于 Node 无 DOM，第 4 项在本地会走 fail-closed 的纯文本降级分支。
+> 由于 Node 无 DOM，第 6 项在本地会走 fail-closed 的纯文本降级分支。
 
 ---
 
@@ -403,14 +435,12 @@ SMOKE_NETWORK=1 npm run smoke  # 额外向 api.github.com 发 1 次请求，验�
 
 | 现象 | 排查方向 |
 | --- | --- |
-| 打开就提示「Token 无效或已过期」 | Token 被吊销 / 复制不全 / 已过期；重新生成并「测试并保存」 |
-| 提示「仓库或路径不存在」 | Owner / Repo / Branch 拼写；私有仓库是否已在 Token 授权范围内 |
-| 提示权限不足 | 经典 Token 需要 `repo`；fine-grained 需要 `Contents: Read and write` |
-| 触发限频 | 已认证 5000 次/小时；少点几次「同步」，或等提示的重置时间 |
+| 打开一篇笔记都没有 | 公开展示仓库是否为 public；`useConfig.js` 里的 `PUBLIC_*` 常量是否写对；仓库里是否有对应子目录（`全栈/`、`算法/`） |
+| 算法一篇都没有 | 算法分类扫的是公开仓库的 `算法/`，它镜像自私有工作区的 `笔记/`；确认里面有 `.md` |
+| 触发限频 | 匿名 60 次/小时/IP；等提示的重置时间，或换个网络 |
 | 中文变成乱码 | 不应发生（已做 UTF-8 安全编解码）；若出现请提 issue 并附上笔记原文 |
-| 保存冲突 409 | 同一文件被别处修改；点「同步」拉取最新版本后重新编辑 |
-| 笔记数量对不上 | 技术仓库只统计 `全栈/` 下的 `.md` / `.markdown`，算法仓库统计根目录及子目录；两个仓库的代码等其它文件都不会被读取 |
-| 某个仓库的笔记没出现 | 该页签的 Owner / Repo / Branch 拼写；公开展示仓库是否为 public；Token 无效时只读仍应能读到内容 |
+| 笔记数量对不上 | 只统计 `.md` / `.markdown`；`.cpp` / `.prob` / `.json` 等不会被读取 |
+| 本地删了笔记网站还在 | 还没跑 `提交笔记.bat` 第 3 步（镜像带删除同步），或网站没点「同步」 |
 | 单文件读取失败 | Contents API 对 >1MB 文件不返回内容，前端会自动改走 `download_url` raw 通道 |
-| 换电脑后需要重新配置 | 凭据存在浏览器本地，不同设备/浏览器互不同步（安全设计，而非缺陷） |
+| 换电脑后要重新配置吗 | 不用 —— 没有任何凭据需要迁移，打开网站就能看 |
 

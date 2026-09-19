@@ -1,37 +1,21 @@
 /**
- * 笔记仓库 Composable（核心状态）
+ * 笔记仓库 Composable（核心状态）—— 只读
  * ---------------------------------------------------------------
- * 负责与 GitHub 数据仓库的笔记双向同步：
+ * 负责从 GitHub 公开仓库把笔记**读**进来（本站不写）：
  *   loadAll  递归拉取数据仓库全部 Markdown 并解析 frontmatter
- *   save     新建 / 更新（SHA 乐观锁，409 冲突自动提示）
- *   remove   删除
- *   upload   批量导入本地 .md
  * 内建 sha 级缓存：内容未变的文件不会重复下载，显著降低限频风险。
+ *
+ * 新建 / 更新 / 删除 / 导入等写能力已移除 —— 那些在本地由
+ * 「提交笔记.bat」完成，网页端不发起任何写请求。
  */
 import { computed, ref } from 'vue'
-import {
-  GithubError,
-  deleteFile,
-  getFile,
-  listFiles,
-  saveFile,
-} from '../services/github.js'
-import {
-  buildPath,
-  countWords,
-  createNote,
-  genId,
-  isManagedPath,
-  parseNoteFile,
-  serializeNote,
-} from '../services/notes.js'
-import { parseLocalMarkdownFiles } from '../services/exporter.js'
+import { GithubError, getFile, listFiles } from '../services/github.js'
+import { countWords, parseNoteFile } from '../services/notes.js'
 import { toast } from './useToast.js'
 import { useConfig } from './useConfig.js'
 
 const notes = ref([])
 const loading = ref(false)
-const saving = ref(false)
 const lastSyncAt = ref('')
 const loadError = ref('')
 const progress = ref({ done: 0, total: 0, label: '' })
@@ -162,7 +146,7 @@ async function loadAll(opts = {}) {
        没有 Token 走 raw CDN 匿名读（公开仓库，访客路径）。 */
     const enabled = vaults.value.filter((v) => v.owner && v.repo)
     if (!enabled.length) {
-      throw new GithubError('尚未配置任何数据仓库，请先在「连接设置」中填写 Owner 与 Repo。')
+      throw new GithubError('尚未配置数据仓库，请检查 src/composables/useConfig.js 中的 PUBLIC_* 常量。')
     }
 
     const merged = []
@@ -183,7 +167,8 @@ async function loadAll(opts = {}) {
           if (!remote) return null
           // 匿名读没有 sha，用文件树里的 sha 兜底，保证缓存能命中
           const sha = remote.sha || file.sha
-          const note = parseNoteFile({ ...file, sha }, remote.content)
+          // 必须把笔记目录传给解析器：分类要从「剥掉笔记目录之后」的路径推断
+          const note = parseNoteFile({ ...file, sha }, remote.content, { root: vault.notesDir || '' })
           note.vault = vault.id
           note.vaultLabel = vault.label
           note.vaultNotesDir = vault.notesDir || ''
@@ -225,170 +210,6 @@ async function loadAll(opts = {}) {
   }
 }
 
-/**
- * 新建笔记并推送到 GitHub
- * @param {{title?:string, category?:string, tags?:string[]|string, body?:string}} draft
- * @returns {Promise<object|null>}
- */
-async function create(draft) {
-  saving.value = true
-  try {
-    const { activeVault } = useConfig()
-    const vault = activeVault.value
-    const id = genId()
-    const title = (draft.title || '').trim() || '未命名笔记'
-    const note = createNote({ ...draft, id, title })
-    note.vault = vault.id
-    note.vaultLabel = vault.label
-    note.vaultNotesDir = vault.notesDir || ''
-    note.path = buildPath(id, title, vault.notesDir)
-
-    const { sha } = await saveFile(note.path, serializeNote(note), undefined, `create: ${note.title}`, vault)
-    note.sha = sha
-    notes.value = [note, ...notes.value]
-    fileCache.set(note.path, { sha, note })
-    persistCache()
-    toast.success(`已创建：${note.title}`)
-    return note
-  } catch (err) {
-    const message = err instanceof GithubError ? err.message : err?.message || '创建失败'
-    toast.error(message)
-    return null
-  } finally {
-    saving.value = false
-  }
-}
-
-/**
- * 保存（更新）笔记
- * 标题变化时会重命名文件（先写新文件，再删除旧文件）。
- * @param {object} note
- * @returns {Promise<object|null>}
- */
-async function update(note) {
-  if (!note) return null
-  saving.value = true
-  try {
-    const { vaults } = useConfig()
-    const vault = vaults.value.find((v) => v.id === note.vault) || vaults.value[0]
-    const updated = { ...note, updated: new Date().toISOString() }
-    // 仅对 SPA 托管命名的文件跟随标题改名；
-    // 历史笔记按原路径原位写回，保持用户自己整理的目录结构不被搬动。
-    const nextPath = isManagedPath(updated.path) ? buildPath(updated.id, updated.title, vault.notesDir) : updated.path
-    const renamed = nextPath !== updated.path
-    const content = serializeNote(updated)
-
-    // 已存在则携带原 sha，避免覆盖他人提交
-    const { sha } = await saveFile(nextPath, content, renamed ? undefined : updated.sha, `update: ${updated.title}`, vault)
-
-    if (renamed && updated.path) {
-      try {
-        await deleteFile(updated.path, updated.sha, `rename: ${note.title} -> ${updated.title}`, vault)
-      } catch (err) {
-        toast.warn(`旧文件清理失败（可忽略）：${err?.message || err}`)
-      }
-      fileCache.delete(updated.path)
-    }
-
-    updated.path = nextPath
-    updated.sha = sha
-    const idx = notes.value.findIndex((n) => n.id === updated.id)
-    if (idx >= 0) notes.value.splice(idx, 1, updated)
-    fileCache.set(nextPath, { sha, note: updated })
-    persistCache()
-    toast.success(`已保存：${updated.title}`)
-    return updated
-  } catch (err) {
-    if (err instanceof GithubError && err.status === 409) {
-      toast.error('保存冲突：远端文件已更新，请点击「重新同步」后再编辑。')
-    } else {
-      toast.error(err instanceof GithubError ? err.message : err?.message || '保存失败')
-    }
-    return null
-  } finally {
-    saving.value = false
-  }
-}
-
-/** 删除笔记 */
-async function remove(note) {
-  if (!note?.path) return false
-  saving.value = true
-  try {
-    const { vaults } = useConfig()
-    const vault = vaults.value.find((v) => v.id === note.vault) || vaults.value[0]
-    await deleteFile(note.path, note.sha, `delete: ${note.title}`, vault)
-    notes.value = notes.value.filter((n) => n.id !== note.id)
-    fileCache.delete(note.path)
-    persistCache()
-    toast.success(`已删除：${note.title}`)
-    return true
-  } catch (err) {
-    toast.error(err instanceof GithubError ? err.message : err?.message || '删除失败')
-    return false
-  } finally {
-    saving.value = false
-  }
-}
-
-/**
- * 批量导入本地 Markdown 文件
- * @param {FileList|File[]} files
- * @param {{preserveSource?: boolean}} [opts]
- * @returns {Promise<{ok:number, failed:number}>}
- */
-async function uploadLocal(files, opts = {}) {
-  const { notes: parsed, errors } = await parseLocalMarkdownFiles(files)
-  errors.forEach((e) => toast.warn(`${e.name}：${e.message}`))
-  if (!parsed.length) {
-    toast.warn('没有可导入的 Markdown 文件')
-    return { ok: 0, failed: errors.length }
-  }
-
-  saving.value = true
-  let ok = 0
-  let failed = 0
-  progress.value = { done: 0, total: parsed.length, label: '正在上传…' }
-
-  try {
-    const { activeVault } = useConfig()
-    const vault = activeVault.value
-    for (const draft of parsed) {
-      try {
-        const id = genId()
-        const title = (draft.title || '').trim() || '未命名笔记'
-        const note = createNote({
-          ...draft,
-          id,
-          title,
-          source: opts.preserveSource === false ? '' : draft.source,
-        })
-        note.vault = vault.id
-        note.vaultLabel = vault.label
-        note.vaultNotesDir = vault.notesDir || ''
-        note.path = buildPath(id, title, vault.notesDir)
-        // 逐篇串行上传：内容哈希由 GitHub 计算，串行可保证 commit 顺序清晰
-        const { sha } = await saveFile(note.path, serializeNote(note), undefined, `import: ${note.title}`, vault)
-        note.sha = sha
-        notes.value = [note, ...notes.value]
-        fileCache.set(note.path, { sha, note })
-        ok += 1
-      } catch (err) {
-        failed += 1
-        toast.error(`上传失败：${draft.title}（${err?.message || err}）`)
-      } finally {
-        progress.value = { ...progress.value, done: progress.value.done + 1 }
-      }
-    }
-    if (ok) persistCache()
-    if (ok) toast.success(`成功导入 ${ok} 篇笔记${failed ? `，${failed} 篇失败` : ''}`)
-    return { ok, failed }
-  } finally {
-    saving.value = false
-    progress.value = { done: 0, total: 0, label: '' }
-  }
-}
-
 /** 清空本地缓存（内存 + localStorage），强制下次全量下载 */
 function invalidateCache() {
   fileCache.clear()
@@ -402,10 +223,10 @@ function invalidateCache() {
 }
 
 /**
- * 彻底抹除本机笔记数据（内存 + localStorage）
+ * 彻底抹除本机笔记缓存（内存 + localStorage）
  * ---------------------------------------------------------------
- * 用于「清除凭据」：只清 Token 是不够的 —— 笔记正文默认缓存在 localStorage，
- * 若不清掉，别人在这台电脑上打开网站仍能从缓存里读到全部笔记。
+ * 站点不持有凭据，缓存里只是**公开笔记的副本**，本身不敏感；
+ * 想在这台电脑上不留痕时调用它（等同浏览器「清除站点数据」）。
  */
 function purge() {
   invalidateCache()
@@ -423,7 +244,6 @@ export function useNotes() {
   return {
     notes,
     loading,
-    saving,
     progress,
     lastSyncAt,
     loadError,
@@ -433,10 +253,6 @@ export function useNotes() {
     totalWords,
     loadAll,
     hydrateFromCache,
-    create,
-    update,
-    remove,
-    uploadLocal,
     invalidateCache,
     purge,
     getById,

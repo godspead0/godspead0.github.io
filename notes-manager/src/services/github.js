@@ -1,17 +1,19 @@
 /**
- * GitHub Contents API 服务层
+ * GitHub REST API 客户端（只读为主）
  * ---------------------------------------------------------------
- * 纯前端直连 GitHub REST API，无自建后端。
+ * 纯前端直连 GitHub，无自建后端。站点**不持有任何凭据**。
  * 职责：
- *   1. 凭据管理（localStorage）
- *   2. UTF-8 安全的 Base64 编解码（中文不乱码）
- *   3. getFile / saveFile / deleteFile / listFiles 文件级封装
- *   4. SHA 乐观锁校验，防止并发覆盖
- *   5. 统一错误拦截：401 Token 失效、403 限频、404、超时、网络异常
+ *   1. UTF-8 安全的 Base64 编解码（中文不乱码）
+ *   2. listFilesViaTree + getFile / listFiles 文件级读取
+ *   3. 匿名读正文走 raw CDN（不计入 API 额度）
+ *   4. 统一错误拦截：403 限频、404、超时、网络异常
+ *
+ * `saveFile` / `deleteFile` 仍保留在服务层，但**应用层已无任何调用点** ——
+ * 它们需要 Token（`requireToken`），而站点无从获得 Token，调用即抛 `NO_TOKEN`。
+ * 留着是为了万一将来重新引入写路径时不至于静默写出去。
  */
 
 const API_BASE = 'https://api.github.com'
-const STORAGE_KEY = 'notes-manager.config.v1'
 const DEFAULT_TIMEOUT = 20000
 
 /* ------------------------------------------------------------------ */
@@ -59,7 +61,7 @@ function describeError(status, payload, resetAt) {
     case 404:
       return {
         code: 'NOT_FOUND',
-        message: '仓库或路径不存在：请检查 Owner / Repo / Branch 拼写，以及 Token 是否有权访问该私有仓库。',
+        message: '仓库不存在或不是公开的：请检查 Owner / Repo / Branch 拼写，并确认该仓库是 public（私有仓库匿名读不到）。',
       }
     case 409:
       return { code: 'CONFLICT', message: '文件冲突：远端内容已被修改，请先拉取最新版本再提交。' }
@@ -109,66 +111,29 @@ export function base64ToUtf8(base64) {
 /* ------------------------------------------------------------------ */
 
 /**
- * 旧版扁平配置的默认值。
- * owner / repo / branch **刻意留空**：站点是公开的，写在这里的默认值会被任何访客
- * 在配置弹窗里看到，等于公开私有仓库名。真实值只存在浏览器 localStorage 中。
+ * 一个仓库配置的形状。
+ * owner / repo / branch 由 `useConfig.js` 的 `PUBLIC_*` 常量填入；
+ * `token` 恒为空串 —— 站点不持有凭据（保留该字段是为了让 `requireToken` 的守卫有判断依据）。
  */
 export const DEFAULT_CONFIG = {
   owner: '',
   repo: '',
   branch: '',
   token: '',
-  tokenPrefix: 'ghp-', // 仅用于 UI 提示，不参与请求
-}
-
-export function loadConfig() {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY)
-    if (!raw) return { ...DEFAULT_CONFIG }
-    const parsed = JSON.parse(raw)
-    return { ...DEFAULT_CONFIG, ...parsed }
-  } catch {
-    return { ...DEFAULT_CONFIG }
-  }
-}
-
-export function persistConfig(config) {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(config))
-    return true
-  } catch (err) {
-    throw new GithubError('本地存储写入失败：浏览器可能处于隐私模式或容量已满。', {
-      code: 'STORAGE_ERROR',
-      detail: err,
-    })
-  }
-}
-
-export function clearConfig() {
-  localStorage.removeItem(STORAGE_KEY)
 }
 
 /* ------------------------------------------------------------------ */
 /* 请求核心                                                             */
 /* ------------------------------------------------------------------ */
 
-let currentConfig = loadConfig()
-
-export function setConfig(next) {
-  currentConfig = { ...currentConfig, ...next }
-  persistConfig(currentConfig)
-  return currentConfig
-}
-
 /**
  * 把 vault（多仓库配置项）归一化成 request 层需要的仓库配置。
- * ---------------------------------------------------------------
- * 多仓库场景下「全局 currentConfig」会被并发加载互相踩踏，
- * 因此所有导出的 API 都支持显式传入 vault，内部一律走这个函数。
- * 不传 vault 时退回全局配置（单仓库 / 测试场景）。
+ * 所有导出的 API 都支持显式传入 vault，内部一律走这个函数，
+ * 避免「全局 currentConfig」在并发加载时互相踩踏。
+ * 不传 vault 时返回默认配置（读取必然失败，符合「没配数据源」的语义）。
  */
 function resolveConfig(vault) {
-  if (!vault) return currentConfig
+  if (!vault) return { ...DEFAULT_CONFIG }
   return {
     ...DEFAULT_CONFIG,
     owner: vault.owner || DEFAULT_CONFIG.owner,
@@ -178,15 +143,7 @@ function resolveConfig(vault) {
   }
 }
 
-export function getConfig() {
-  return { ...currentConfig }
-}
-
-export function isConfigured() {
-  return Boolean(currentConfig.token && currentConfig.owner && currentConfig.repo)
-}
-
-function buildHeaders(extra = {}, cfg = currentConfig) {
+function buildHeaders(extra = {}, cfg = DEFAULT_CONFIG) {
   const headers = {
     Accept: 'application/vnd.github+json',
     'X-GitHub-Api-Version': '2022-11-28',
@@ -210,7 +167,7 @@ function requireToken(cfg) {
   }
 }
 
-function contentsUrl(path, cfg = currentConfig) {
+function contentsUrl(path, cfg = DEFAULT_CONFIG) {
   const { owner, repo } = cfg
   const clean = String(path || '').replace(/^\/+/, '').replace(/\/+$/, '')
   const base = `${API_BASE}/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/contents`
@@ -225,7 +182,7 @@ function contentsUrl(path, cfg = currentConfig) {
  * @param {number} timeout
  * @returns {Promise<any>} 解析后的 JSON；204 返回 null
  */
-async function request(url, options = {}, timeout = DEFAULT_TIMEOUT, cfg = currentConfig) {
+async function request(url, options = {}, timeout = DEFAULT_TIMEOUT, cfg = DEFAULT_CONFIG) {
   /* 没有 Token 时不再直接报错：公开仓库允许匿名读取，访客正是靠这条路径看笔记。
      匿名调用的 API 限额是 60 次/小时（每 IP），因此匿名读正文时改走 raw CDN，
      见 getFile()。写操作没有 Token 会被 GitHub 拒绝，由界面层提前拦截。 */
@@ -282,33 +239,8 @@ async function request(url, options = {}, timeout = DEFAULT_TIMEOUT, cfg = curre
   return payload
 }
 
-/* ------------------------------------------------------------------ */
-/* 连通性测试                                                           */
-/* ------------------------------------------------------------------ */
-
-/**
- * 验证 Token / 仓库 / 分支是否可用
- * @returns {Promise<{repo: string, branch: string, private: boolean, canWrite: boolean, user: string}>}
- */
-export async function testConnection(vault = null) {
-  const cfg = resolveConfig(vault)
-  const repoInfo = await request(`${API_BASE}/repos/${encodeURIComponent(cfg.owner)}/${encodeURIComponent(cfg.repo)}`, {}, DEFAULT_TIMEOUT, cfg)
-  let user = ''
-  try {
-    const me = await request(`${API_BASE}/user`, {}, DEFAULT_TIMEOUT, cfg)
-    user = me?.login || ''
-  } catch {
-    /* Token 可能是 fine-grained 且无 user 权限，忽略 */
-  }
-  const branch = cfg.branch || repoInfo.default_branch
-  return {
-    repo: repoInfo.full_name,
-    branch,
-    private: Boolean(repoInfo.private),
-    canWrite: Boolean(repoInfo.permissions?.push),
-    user,
-  }
-}
+/* 注：原先还有一个 testConnection()（验证 Token / 仓库 / 读写权限），
+   随「连接设置」弹窗一起移除 —— 站点没有 Token 可测，也不需要测权限。 */
 
 /* ------------------------------------------------------------------ */
 /* 文件读写                                                             */
@@ -318,7 +250,7 @@ export async function testConnection(vault = null) {
  * raw CDN 地址：匿名读取公开仓库正文时使用
  * 不计入 GitHub API 的 60 次/小时匿名限额，也不需要鉴权。
  */
-function rawFileUrl(path, cfg = currentConfig) {
+function rawFileUrl(path, cfg = DEFAULT_CONFIG) {
   const { owner, repo, branch } = cfg
   const encoded = String(path || '')
     .replace(/^\/+/, '')
@@ -523,7 +455,13 @@ async function listFilesViaTree(dir = '', vault = null) {
 
     try {
       data = await request(url, {}, 30000, cfg)
-    } catch {
+    } catch (err) {
+      /* ⚠️ 这里的 404 必须抛出去，不能吞掉。
+         本请求的 URL 里**没有路径**（只有 owner/repo/branch），
+         所以 404 不可能是「笔记目录不存在」，只能是「仓库或分支不存在 / 不是公开的」。
+         吞掉的话站点会静默显示「0 篇笔记」，用户完全看不出是仓库配错了。
+         其它错误（403 限频、超时、网络、结果被截断）仍回退到逐层递归，功能不退化。 */
+      if (err instanceof GithubError && (err.status === 404 || err.code === 'NOT_FOUND')) throw err
       return null
     }
     // truncated=true 说明仓库太大被截断，此时结果不完整，宁可回退递归

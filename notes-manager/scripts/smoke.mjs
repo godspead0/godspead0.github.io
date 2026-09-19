@@ -5,8 +5,12 @@
  *
  * 覆盖：
  *   1. 服务层纯函数：UTF-8 Base64 往返、frontmatter 解析/序列化、slug、日期键
- *   2. Fuse.js 搜索与筛选逻辑（useSearch）
- *   3. 整棵组件树的 SSR 渲染（能捕获模板/响应式引用类运行时错误）
+ *   2. 分类推断回归：多分类下按各自的笔记目录剥前缀（算法笔记不塌成一层）
+ *   3. Fuse.js 搜索与筛选逻辑（useSearch）
+ *   4. 整棵组件树的 SSR 渲染（能捕获模板/响应式引用类运行时错误）
+ *   5. 只读保证：DOM 里没有写入口、配置里没有 token、服务层写操作抛 NO_TOKEN
+ *   6. 错误不静默：仓库 404 要抛错，而不是返回空列表让站点显示「0 篇笔记」
+ *   7. 联网检查（SMOKE_NETWORK=1）：以匿名身份读真实数据源
  *
  * 说明：SSR 仅用于"能否渲染"的静态校验，不代替浏览器端人工验收。
  */
@@ -92,6 +96,7 @@ try {
   console.log('\n[1] 服务层纯函数')
   const gh = await load('/src/services/github.js')
   const notesSvc = await load('/src/services/notes.js')
+  const exporterSvc = await load('/src/services/exporter.js')
   const fm = await load('/src/services/frontmatter.js')
 
   const cn = '# 中文标题 🎉\n\n正文：你好，世界！'
@@ -112,7 +117,9 @@ try {
   )
 
   check('slugify 保留中文并转义空白', notesSvc.slugify('Docker 中间件 / 笔记') === 'Docker-中间件-笔记', notesSvc.slugify('Docker 中间件 / 笔记'))
-  check('buildPath 结构为 全栈/{id}_{slug}.md', /^全栈\/\d+_.+\.md$/.test(notesSvc.buildPath('1700000000000', '标题')))
+  check('stripRootDir 剥掉笔记目录前缀', notesSvc.stripRootDir('全栈/前端部分/Vue.md', '全栈') === '前端部分/Vue.md')
+  check('stripRootDir 对「笔记目录 = 仓库根」原样返回', notesSvc.stripRootDir('力扣/a.md', '') === '力扣/a.md')
+  check('stripRootDir 前缀不匹配时不误剥', notesSvc.stripRootDir('算法/力扣/a.md', '全栈') === '算法/力扣/a.md')
   check('normalizeTags 去重去 #', notesSvc.normalizeTags('#Vue, vue，源码').join() === 'Vue,源码')
   check('toDateKey 生成 YYYY-MM-DD', /^\d{4}-\d{2}-\d{2}$/.test(notesSvc.toDateKey(new Date(2026, 8, 5))))
   check('formatArchiveLabel 生成 2026年9月', notesSvc.formatArchiveLabel('2026-09') === '2026年9月')
@@ -120,15 +127,37 @@ try {
   // ---- 兼容既有笔记：无 frontmatter、直接按分类文件夹存放 ----
   const legacyRaw = '# **主题**：Vue 全家桶\n\n正文内容'
   const legacyFile = { path: '全栈/前端部分/Vue.md', sha: 'l1', size: legacyRaw.length }
-  const legacy = notesSvc.parseNoteFile(legacyFile, legacyRaw)
+  const legacy = notesSvc.parseNoteFile(legacyFile, legacyRaw, { root: '全栈' })
   check('历史笔记：用文件夹名兜底为分类', legacy.category === '前端部分', legacy.category)
   check('历史笔记：标题取正文首个标题（并清理 Markdown 标记）', legacy.title === '主题：Vue 全家桶', legacy.title)
-  check('历史笔记：id 由路径稳定派生（多次解析一致）', !!legacy.id && legacy.id === notesSvc.parseNoteFile(legacyFile, legacyRaw).id, legacy.id)
-  check('历史笔记：不同路径得到不同 id', legacy.id !== notesSvc.parseNoteFile({ path: '全栈/后端部分/Java.md', sha: 'l2' }, legacyRaw).id)
-  check('历史笔记：判定为非托管命名（不跟随标题改名）', notesSvc.isManagedPath(legacyFile.path) === false)
-  check('托管命名：全栈/{id}_{slug}.md 判定为 true', notesSvc.isManagedPath('全栈/1700000000000_Vue.md') === true)
-  check('嵌套分类：全栈/后端部分/spring框架/SpringBoot.md 归类为 后端部分', notesSvc.categoryFromPath('全栈/后端部分/spring框架/SpringBoot.md') === '后端部分')
-  check('笔记目录下的散装 .md 不产生分类', notesSvc.categoryFromPath('全栈/术语解释.md') === '')
+  check(
+    '历史笔记：id 由路径稳定派生（多次解析一致）',
+    !!legacy.id && legacy.id === notesSvc.parseNoteFile(legacyFile, legacyRaw, { root: '全栈' }).id,
+    legacy.id,
+  )
+  check(
+    '历史笔记：不同路径得到不同 id',
+    legacy.id !== notesSvc.parseNoteFile({ path: '全栈/后端部分/Java.md', sha: 'l2' }, legacyRaw, { root: '全栈' }).id,
+  )
+  check('嵌套分类：全栈/后端部分/spring框架/SpringBoot.md 归类为 后端部分', notesSvc.categoryFromPath('全栈/后端部分/spring框架/SpringBoot.md', '全栈') === '后端部分')
+  check('笔记目录下的散装 .md 不产生分类', notesSvc.categoryFromPath('全栈/术语解释.md', '全栈') === '')
+
+  /* ★ 多分类回归：必须按**各自的**笔记目录剥离前缀。
+     硬编码 `全栈` 的话，`算法/力扣/x.md` 会因为剥不掉 `算法/` 而整体归到「算法」这一类，
+     算法笔记的分类树就全塌成一层了。 */
+  check('算法笔记：分类取真实子目录而非「算法」', notesSvc.categoryFromPath('算法/力扣/二分查找.md', '算法') === '力扣')
+  check(
+    '算法笔记：解析后的分类正确',
+    notesSvc.parseNoteFile({ path: '算法/洛谷/最短路.md', sha: 'a9' }, '# 最短路', { root: '算法' }).category === '洛谷',
+  )
+  check(
+    '技术笔记：解析后的分类正确',
+    notesSvc.parseNoteFile({ path: '全栈/前端部分/Vue.md', sha: 'a8' }, '# Vue', { root: '全栈' }).category === '前端部分',
+  )
+  check(
+    '分类不受笔记目录名与一级子目录重名影响',
+    notesSvc.categoryFromPath('算法/算法/xx.md', '算法') === '算法',
+  )
 
   // ---- 标题兜底：原先只认一级 "#"，导致 44/93 篇笔记显示「未命名笔记」 ----
   const T = (body, path = '全栈/x.md') => notesSvc.parseNoteFile({ path, sha: 's' }, body).title
@@ -264,10 +293,35 @@ try {
   check('活跃筛选状态可识别', (s.clearFilters(), s.hasActiveFilter.value === false))
 
   /* 2.9 多仓库（技术 / 算法）：一级分类 */
-  check('buildPath 默认写入 全栈/ 目录', notesSvc.buildPath('1', '标题') === '全栈/1_标题.md')
-  check('buildPath 支持仓库根目录（算法仓库）', notesSvc.buildPath('1', '标题', '') === '1_标题.md')
-  check('buildPath 支持自定义目录', notesSvc.buildPath('1', '标题', '算法') === '算法/1_标题.md')
-  check('buildPath 容错首尾斜杠', notesSvc.buildPath('1', '标题', '/算法/') === '算法/1_标题.md')
+  /* 导出包的目录结构：以前所有笔记被扁平塞进写死的 `全栈/`，
+     于是算法笔记也躺在 `全栈/` 下。现在按分类分顶层目录并保留原子目录。 */
+  const zp = (o) => exporterSvc.zipEntryPath(o)
+  check(
+    '导出路径：技术笔记 → 技术/{分类}/文件名',
+    zp({ vaultLabel: '技术', vaultNotesDir: '全栈', path: '全栈/前端部分/Vue.md', id: '1', title: 'Vue' }).top === '技术' &&
+      zp({ vaultLabel: '技术', vaultNotesDir: '全栈', path: '全栈/前端部分/Vue.md', id: '1', title: 'Vue' }).rel === '前端部分/Vue.md',
+  )
+  check(
+    '导出路径：算法笔记不会落进 全栈/',
+    zp({ vaultLabel: '算法', vaultNotesDir: '算法', path: '算法/力扣/二分查找.md', id: '2', title: '二分' }).top === '算法' &&
+      zp({ vaultLabel: '算法', vaultNotesDir: '算法', path: '算法/力扣/二分查找.md', id: '2', title: '二分' }).rel === '力扣/二分查找.md',
+  )
+  check(
+    '导出路径：直接躺在笔记目录根下',
+    zp({ vaultLabel: '技术', vaultNotesDir: '全栈', path: '全栈/术语.md', id: '3', title: '术语' }).rel === '术语.md',
+  )
+  check(
+    '导出路径：笔记目录为仓库根时不剥前缀',
+    zp({ vaultLabel: '算法', vaultNotesDir: '', path: '力扣/a.md', id: '4', title: 'a' }).rel === '力扣/a.md',
+  )
+  check(
+    '导出路径：无 path 时退化为 {id}_{slug}.md',
+    zp({ vaultLabel: '技术', vaultNotesDir: '全栈', id: '5', title: 'Docker 网络' }).rel === '5_Docker-网络.md',
+  )
+  check(
+    '导出路径：缺 vaultLabel 时顶层目录兜底为 notes',
+    zp({ vaultNotesDir: '', path: 'a.md', id: '6', title: 'a' }).top === 'notes',
+  )
 
   const vaultNotes = ref([
     notesSvc.createNote({ id: 'v1', title: 'MySQL 索引', category: '数据库部分', tags: ['mysql'], body: 'B+ 树', created: '2026-09-01T00:00:00.000Z' }),
@@ -333,11 +387,21 @@ try {
   )
   check('访客顶栏显示公开展示仓库', html.includes(`${pubOwner}/${pubRepo}`))
   check('访客顶栏带「只读」标记', html.includes('只读'))
-  check('访客无需配置 → 不自动弹出连接设置', !html.includes('连接 GitHub 数据仓库'))
-  check('访客默认不含 Token（匿名只读）', ws.config.vaults.value.every((v) => !v.token))
+  check('访客无需配置 → 不自动弹出任何弹窗', !html.includes('不向 GitHub 发起任何写请求'))
+  /* 纯只读站点里连 token 字段都不该存在 —— 不是「有但没用」，是根本没有 */
+  check('配置对象里不再有 token 字段', ws.config.vaults.value.every((v) => !('token' in v)))
   check('访客处于只读模式', ws.config.readOnly.value === true && ws.config.writable.value === false)
   check('只读模式下仍保留同步入口', html.includes('同步'))
-  check('未配置时列表引导同步/新建', html.includes('还没有同步到任何笔记'))
+  check('无笔记时列表给出同步引导', html.includes('还没有同步到任何笔记'))
+
+  /* 本站**不提供任何写入口**：不能只是把按钮禁用，而是根本不该出现在 DOM 里。
+     用带尖括号的按钮文案断言，避免误伤正文里的同名词（如「这天没有新建笔记记录」）。*/
+  check('站点没有「新建」按钮', !html.includes('>新建<'))
+  check('站点没有「导入」按钮', !html.includes('导入本地'))
+  check('站点没有「一键打卡」按钮', !html.includes('今日一键打卡'))
+  check('站点没有「补卡」按钮', !html.includes('补卡 +1'))
+  check('站点没有「批量删除」按钮', !html.includes('批量删除'))
+  check('站点没有「连接设置」入口', !html.includes('连接设置'))
 
   /* 只读模式必须在服务层就拦住写操作，而不是等 GitHub 回 403 */
   const ghMod = await load('/src/services/github.js')
@@ -347,14 +411,15 @@ try {
   } catch (e) {
     roErr = e
   }
-  check('只读模式下写文件被拒绝', roErr && roErr.code === 'NO_TOKEN')
+  check('无 Token 时写文件被服务层拒绝', roErr && roErr.code === 'NO_TOKEN')
   let roDel = null
   try {
     await ghMod.deleteFile('全栈/不该被删掉.md', 'deadbeef', 'test', ws.config.vaults.value[0])
   } catch (e) {
     roDel = e
   }
-  check('只读模式下删文件被拒绝', roDel && roDel.code === 'NO_TOKEN')
+  check('无 Token 时删文件被服务层拒绝', roDel && roDel.code === 'NO_TOKEN')
+  check('拒绝写操作时给出中文提示', String(roErr?.message || '').includes('只读模式'))
 
   /* 文件树缓存：技术/算法两个页签通常指向同一个仓库，
      不缓存就会把同一棵树取两遍 —— 匿名访客每小时只有 60 次 API 额度，白白翻倍。
@@ -365,6 +430,14 @@ try {
   let bodyUrl = ''
   globalThis.fetch = async (url) => {
     const u = String(url)
+    /* 不存在或非公开的仓库：GitHub 对 Trees 请求回 404。
+       注意该 URL 里**没有路径**，所以 404 只可能是仓库 / 分支的问题。 */
+    if (u.includes('missing-repo')) {
+      return new Response(JSON.stringify({ message: 'Not Found' }), {
+        status: 404,
+        headers: { 'Content-Type': 'application/json' },
+      })
+    }
     if (u.includes('/git/trees/')) {
       treeCalls++
       return new Response(
@@ -397,29 +470,56 @@ try {
       `实际 ${bodyUrl.slice(0, 60)}`,
     )
     check('匿名读正文没有触碰 api.github.com', !bodyUrl.includes('api.github.com'))
+
+    /* 仓库不存在 / 不是公开的：Trees 请求 404。以前这个错被吞掉并回退到 listDir，
+       而 listDir 又把 404 当成「目录不存在」返回 []，于是**整站静默显示 0 篇笔记**，
+       用户完全看不出是仓库名写错了或仓库被改成私有了。 */
+    const missingVault = { id: 'tmp2', label: '不存在', owner: 'octocat', repo: 'missing-repo', branch: 'main', token: '', notesDir: '' }
+    let missingErr = null
+    try {
+      await ghMod.listFiles('', 0, missingVault)
+    } catch (err) {
+      missingErr = err
+    }
+    check('仓库 404 时不静默返回空列表（而是抛错）', missingErr !== null, 'listFiles 竟然正常返回了')
+    check('仓库 404 归一化为 NOT_FOUND', missingErr?.code === 'NOT_FOUND' || missingErr?.status === 404, `${missingErr?.code}/${missingErr?.status}`)
+    check('404 提示指出「仓库不存在或不是公开的」', /不是公开的|不存在/.test(missingErr?.message || ''), missingErr?.message)
   } finally {
     globalThis.fetch = realFetch
   }
 
-  /* 配置弹窗默认不弹出；手动打开后仍应有技术/算法两个页签 */
-  ws.config.openModal()
+  /* 「数据来源」弹窗默认不弹出；手动打开后应列出两个分类与各自的扫描目录 */
+  ws.config.openSource()
   html = await renderApp()
-  check('打开设置后渲染连接弹窗', html.includes('连接 GitHub 数据仓库'))
-  check(
-    '配置弹窗渲染技术/算法两个仓库页签',
-    html.includes('笔记目录（留空 = 仓库根目录）') && html.includes('技术') && html.includes('算法'),
-  )
-  ws.config.showModal.value = false
+  check('打开后渲染「数据来源」弹窗', html.includes('数据来源'))
+  check('弹窗列出技术 / 算法两个分类', html.includes('技术') && html.includes('算法'))
+  check('弹窗列出各自的扫描目录', html.includes('全栈/') && html.includes('算法/'))
+  check('弹窗说明只读、不做写操作', html.includes('不向 GitHub 发起任何写请求'))
+  ws.config.showSource.value = false
+  html = await renderApp()
+  check('关闭后弹窗消失', !html.includes('不向 GitHub 发起任何写请求'))
 
   /* 清空仓库 → 顶栏回到「未配置仓库」 */
   const savedVaults = ws.config.vaults.value.map((v) => ({ ...v }))
+  /* 还原真实配置。
+     ⚠️ 必须显式删除用例期间**新增**的键 —— Object.assign 只覆盖不删除，
+     只靠它的话虚构的 `token` 字段会留在真实 vault 上，
+     后面 §5 的联网检查就会拿着这个 dummy token 去打真实仓库（401）。 */
+  const restoreVaults = () => {
+    savedVaults.forEach((saved, i) => {
+      const target = ws.config.vaults.value[i]
+      if (!target) return
+      for (const k of Object.keys(target)) if (!(k in saved)) delete target[k]
+      Object.assign(target, saved)
+    })
+  }
   ws.config.vaults.value.forEach((v) => {
     v.owner = ''
     v.repo = ''
   })
   html = await renderApp()
   check('清空仓库后顶栏回到「未配置仓库」', html.includes('未配置仓库'))
-  savedVaults.forEach((v, i) => Object.assign(ws.config.vaults.value[i], v))
+  restoreVaults()
 
   /* 后续断言需要一个「已连接」的仓库。
      用虚构的 owner/repo —— 真实仓库名不该出现在这个公开仓库的源码里。 */
@@ -442,7 +542,6 @@ try {
   check('配置两个仓库后顶栏显示两个仓库标签', html.includes('技术 + 算法'))
 
   /* 3.2 注入数据：列表 / 侧栏筛选树 / 归档 / 仪表盘 */
-  ws.config.showModal.value = false
   ws.notes.value = [
     notesSvc.createNote({
       id: '1',
@@ -506,20 +605,21 @@ try {
   check('热力图渲染出着色单元格', /class="[^"]*lvl-[1-4]/.test(html))
   check('热力图近 26 周共 182 个单元格', rects === 26 * 7, `实际 ${rects} 个`)
 
-  /* 3.3 编辑器弹窗 */
-  ws.openCreate()
+  /* 3.3 只读：详情视图与卡片都只有「查看 / 导出」类动作，没有编辑与删除。
+     注意用 `文案</button>` 断言 —— 源码注释里的「编辑」在 SSR 下会被渲染成
+     HTML 注释，用裸词 `编辑` 判断会误报。 */
+  ws.detailNote.value = ws.notes.value[1]
+  html = await renderApp()
+  check('详情视图提供「下载 .md」', html.includes('下载 .md'))
+  check('详情视图提供「复制原文」', html.includes('复制原文'))
+  check('详情视图不再有「编辑」按钮', !html.includes('编辑</button>'))
+  check('详情视图不再有「删除」按钮', !html.includes('删除</button>') && !html.includes('btn-danger'))
+  ws.detailNote.value = null
   html = await renderApp()
   check(
-    '新建笔记弹窗渲染完整表单',
-    html.includes('新建笔记') && html.includes('标签（Enter / 逗号 添加）') && html.includes('创建并同步'),
+    '列表卡片也不再有编辑 / 删除按钮',
+    !html.includes('编辑</button>') && !html.includes('删除</button>') && !html.includes('btn-danger'),
   )
-  check('新建笔记可选保存到的仓库', html.includes('保存到仓库') && html.includes('my-algo-notes'))
-  ws.closeEditor()
-
-  ws.openEdit(ws.notes.value[1])
-  html = await renderApp()
-  check('编辑模式回填标题与操作按钮', html.includes('Redis 持久化') && html.includes('保存并同步') && html.includes('删除'))
-  ws.closeEditor()
 
   /* 3.4 阅读视图（Markdown 渲染管线） */
   ws.detailNote.value = ws.notes.value[0]
@@ -548,24 +648,54 @@ try {
   check('toPlainText 剥离 Markdown 语法', mdSvc.toPlainText('## 标题\n\n- a\n- b') === '标题 a b', mdSvc.toPlainText('## 标题\n\n- a\n- b'))
   check('readingMinutes 最少返回 1 分钟', mdSvc.readingMinutes('短') === 1)
 
-  console.log('\n[5] GitHub REST API 错误映射（可选联网检查）')
+  console.log('\n[5] GitHub 匿名读取与错误映射（可选联网检查）')
+  /* 先还原真实配置：上面的 SSR 用例把它换成了虚构仓库（还塞了 dummy token），
+     不还原的话下面的联网检查会拿假凭据去打真实仓库。 */
+  restoreVaults()
+  check('SSR 用例结束后真实配置已还原（无残留 token）', ws.config.vaults.value.every((v) => !v.token))
   if (!process.env.SMOKE_NETWORK) {
-    console.log('  - 已跳过（设置 SMOKE_NETWORK=1 可开启，会向 api.github.com 发起 1 次请求）')
+    console.log('  - 已跳过（设置 SMOKE_NETWORK=1 可开启，会向 api.github.com 发起 1~2 次请求）')
   } else {
-    gh.setConfig({ owner: 'octocat', repo: 'my-tech-notes', branch: 'main', token: 'ghp_invalid_token_for_smoke' })
+    /* 只读站点没有 Token 可以测，改为验证**匿名**读取这条真实路径：
+       1) 不存在的仓库 -> 404 归一化为 NOT_FOUND
+       2) 真实公开仓库的文件树能取到（匿名 60 次/小时额度内） */
+    const bogus = { owner: 'octocat', repo: 'definitely-no-such-repo-xyz-42', branch: 'main' }
     try {
-      await gh.testConnection()
-      check('无效 Token 应被拒绝', false, '请求竟然成功了')
+      await gh.listFiles('', 0, bogus)
+      check('不存在的仓库应抛错', false, '请求竟然成功了')
     } catch (err) {
       if (err?.code === 'NETWORK_ERROR' || err?.code === 'TIMEOUT') {
         console.log(`  - 已跳过（无法访问 api.github.com：${err.message}）`)
       } else {
-        check('无效 Token 归一化为 BAD_CREDENTIALS', err?.code === 'BAD_CREDENTIALS' || err?.status === 401, `${err?.code}/${err?.status}`)
-        check('错误信息为中文可读提示', /Token/.test(err?.message || ''), err?.message)
+        /* Trees 请求的 URL 里没有路径，所以 404 只可能是「仓库 / 分支不存在或非公开」。
+           以前这个错被吞掉，站点会静默显示「0 篇笔记」—— 用户看不出是仓库配错了。 */
+        check('匿名读不存在的仓库 → NOT_FOUND（不再静默返回空）', err?.code === 'NOT_FOUND' || err?.status === 404, `${err?.code}/${err?.status}`)
+        check('错误信息为中文可读提示', /[\u4e00-\u9fa5]/.test(err?.message || ''), err?.message)
       }
-    } finally {
-      gh.clearConfig()
     }
+
+    /* 直接打**真实配置的数据源**（useConfig 的 PUBLIC_*），验证访客看到的那条路径确实通。 */
+    const { useConfig } = await load('/src/composables/useConfig.js')
+    const { vaults } = useConfig()
+    let total = 0
+    for (const v of vaults.value) {
+      if (!v.owner || !v.repo) continue
+      const where = `${v.owner}/${v.repo}@${v.branch} 的 ${v.notesDir || '/'}`
+      try {
+        const files = await gh.listFiles(v.notesDir || '', 0, v)
+        total += files.length
+        check(`匿名可读取真实数据源「${v.label}」（${where}）`, Array.isArray(files), `${files?.length} 篇`)
+        if (files.length) check(`「${v.label}」文件树条目带 path 与 sha`, Boolean(files[0]?.path) && Boolean(files[0]?.sha))
+        else console.log(`  - 「${v.label}」当前 0 篇（${where}）—— 该目录下还没有 .md`)
+      } catch (err) {
+        if (err?.code === 'NETWORK_ERROR' || err?.code === 'TIMEOUT' || err?.code === 'RATE_LIMIT') {
+          console.log(`  - 已跳过「${v.label}」（${err.code}：${err.message}）`)
+        } else {
+          check(`匿名可读取真实数据源「${v.label}」`, false, `${err?.code}/${err?.status} ${err?.message}`)
+        }
+      }
+    }
+    check('真实数据源合计至少能读到一篇笔记', total > 0, `共 ${total} 篇`)
   }
 
   console.log(`\n结果：${passed} 项通过，${failures.length} 项失败`)

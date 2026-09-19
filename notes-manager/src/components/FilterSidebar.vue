@@ -35,7 +35,7 @@ function vaultColor(id) {
   return VAULT_COLORS[id] || '#8b949e'
 }
 
-/** 点击仓库：既筛选列表，也把它设为「新建笔记」的目标仓库 */
+/** 点击仓库分类：筛选列表（本站只读，不再有"写入目标仓库"的概念） */
 function pickVault(v) {
   selectVault(v.id)
   const idx = ws.config.vaults.value.findIndex((x) => x.id === v.id)
@@ -133,7 +133,7 @@ const activeSummary = computed(() => {
           :key="v.id"
           class="row"
           :class="{ active: activeVault === v.id }"
-          :title="`只看「${v.label}」的笔记；同时新建笔记会写入该仓库`"
+          :title="`只看「${v.label}」分类下的笔记`"
           @click="pickVault(v)"
         >
           <span class="dot" :style="{ background: vaultColor(v.id) }" />
@@ -220,7 +220,8 @@ const activeSummary = computed(() => {
               v-for="n in group.notes.slice(0, 30)"
               :key="n.id"
               class="row text-[11px]"
-              @click="ws.openEdit(n)"
+              :title="`查看：${n.title}`"
+              @click="ws.detailNote.value = n"
             >
               <span class="dot" :style="{ background: ws.categories.colorFor(n.category || '未分类') }" />
               <span class="flex-1 truncate text-left">{{ n.title }}</span>

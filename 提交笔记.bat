@@ -16,11 +16,12 @@ set "TECH_REMOTE=git@github.com:godspead0/godspead0_understand.git"
 set "TECH_BRANCH=master"
 set "TECH_LABEL=技术笔记"
 
-rem 算法笔记：笔记直接位于仓库根目录
+rem 算法笔记：笔记位于 笔记/ 目录（不是仓库根目录）
 set "ALGO_DIR=D:\vscode_test_all\test_algorithm"
 set "ALGO_REMOTE=git@github.com:godspead0/godspead0_algorithm.git"
 set "ALGO_BRANCH=main"
 set "ALGO_LABEL=算法笔记"
+set "ALGO_NOTES_SUB=笔记"
 
 rem ==================== 公开展示仓库（网站对所有人展示的就是它）====================
 rem 这个仓库是 public 的，只放 .md 笔记副本；私有工作区里的 .cpp / origin/ 等不会进来。
@@ -55,11 +56,12 @@ if errorlevel 1 goto :vault_fail
 call :sync_vault "%ALGO_DIR%" "%ALGO_REMOTE%" "%ALGO_BRANCH%" "%ALGO_LABEL%" "%MSG%" "2/4"
 if errorlevel 1 goto :vault_fail
 
-rem ==================== 第三步：镜像到公开展示仓库 ====================
+rem ==================== 第三步：镜像到公开展示仓库（单向）====================
+rem 网站是纯只读的，不会在公开仓库里产生任何文件，所以这里只需单向复制。
 echo [3/4] 同步公开展示仓库 ...
 powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0镜像到公开仓库.ps1" ^
   -TechNotesDir "%TECH_DIR%\%PUBLIC_TECH_SUB%" -TechDestSub "%PUBLIC_TECH_SUB%" ^
-  -AlgoNotesDir "%ALGO_DIR%" -AlgoDestSub "%PUBLIC_ALGO_SUB%" ^
+  -AlgoNotesDir "%ALGO_DIR%\%ALGO_NOTES_SUB%" -AlgoDestSub "%PUBLIC_ALGO_SUB%" ^
   -PublicDir "%PUBLIC_DIR%" -PublicRemote "%PUBLIC_REMOTE%" ^
   -Branch "%PUBLIC_BRANCH%" -Message "%MSG%"
 if errorlevel 1 goto :public_fail
