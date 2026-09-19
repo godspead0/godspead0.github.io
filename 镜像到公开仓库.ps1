@@ -44,7 +44,11 @@ function Sync-MdTree {
   }
 
   $files = @(
-    Get-ChildItem -LiteralPath $Src -Recurse -File -Filter *.md |
+    # ⚠️ 这里**不能**用 -Filter *.md：Windows 通配符不做扩展名前缀匹配，
+    #    实测 -Filter *.md 匹配不到 .markdown，而站点侧的正则是 /\.(md|markdown)$/i。
+    #    两边不一致会让 .markdown 笔记在本地一切正常、网站上却永远看不到。
+    Get-ChildItem -LiteralPath $Src -Recurse -File |
+      Where-Object { $_.Extension -match '^\.(md|markdown)$' } |
       # 排除 .git / .obsidian / .claude 等工具目录，这些不该出现在公开仓库里
       Where-Object { $_.FullName -notmatch '\\\.[^\\]+\\' }
   )
@@ -66,8 +70,9 @@ function Sync-MdTree {
   }
 
   # 本地删掉的笔记也要从公开仓库移除，否则公开站点会留着早已删除的内容
+  # 扩展名判断必须与上面的收集逻辑**完全一致**，否则会漏删 .markdown 的旧副本
   $removed = 0
-  foreach ($old in @(Get-ChildItem -LiteralPath $Dst -Recurse -File -Filter *.md)) {
+  foreach ($old in @(Get-ChildItem -LiteralPath $Dst -Recurse -File | Where-Object { $_.Extension -match '^\.(md|markdown)$' })) {
     if (-not $want.Contains($old.FullName.ToLowerInvariant())) {
       Remove-Item -LiteralPath $old.FullName -Force
       $removed++
