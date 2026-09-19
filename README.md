@@ -5,8 +5,12 @@
 - 🌐 线上地址：<https://godspead0.github.io/>
 - 📖 **操作手册**：[`操作手册.md`](操作手册.md) —— 首次配置 / 日常写笔记与提交 / 打卡 / 排错对照表
 - 📦 站点源码：本仓库 `godspead0.github.io`（公开）
-- 🔒 技术笔记：[`godspead0_understand`](https://github.com/godspead0/godspead0_understand)（私有）→ `全栈/` 目录
-- 🧮 算法笔记：[`godspead0_algorithm`](https://github.com/godspead0/godspead0_algorithm)（私有）→ 仓库根目录
+- 🔒 技术笔记：`my-tech-notes`（私有）→ `全栈/` 目录
+- 🧮 算法笔记：`my-algo-notes`（私有）→ 仓库根目录
+
+> **关于占位符**：本文档中的 `your-name` / `my-tech-notes` / `my-algo-notes` /
+> `my-algo-notes-dir` 都是**占位符，不是真实仓库名**。真实的仓库名与本地路径只保存在
+> 本机私有文件（已被 `.gitignore` 忽略）与浏览器 `localStorage` 中，不进入公开仓库。
 
 > 网站把两个仓库聚合成一棵树：**一级分类 = 仓库（技术 / 算法）**，二级才是分类文件夹。
 
@@ -22,9 +26,9 @@ tech_doc/                              ← 站点仓库（公开）
 │  └─ scripts/smoke.mjs                # 离线冒烟测试（113 项断言）
 ├─ 提交笔记.bat                         # 写完笔记后双击即可提交推送（两个仓库依次提交）
 │                                      # 笔记仓库克隆位于站点目录之外：
-│                                      # D:\vscode_test_all\godspead0_understand\
+│                                      # D:\vscode_test_all\my-tech-notes\
 │                                      #   └─ 全栈/      ← ★ 技术笔记
-│                                      # D:\vscode_test_all\test_algorithm\
+│                                      # D:\vscode_test_all\my-algo-notes-dir\
 │                                      #   └─ 力扣/ 洛谷/ ... ← ★ 算法笔记
 ├─ 操作手册.md                          # ★ 完整使用流程（首次配置 / 日常 / 排错）
 └─ .gitignore                          # 排除笔记仓库、构建产物、系统文件
@@ -32,7 +36,7 @@ tech_doc/                              ← 站点仓库（公开）
 
 ## 日常使用：写笔记 → 提交
 
-1. 打开 `godspead0_understand/全栈/`（技术）或 `test_algorithm/`（算法），新建或编辑 `.md` 笔记
+1. 打开 `my-tech-notes/全栈/`（技术）或 `my-algo-notes-dir/`（算法），新建或编辑 `.md` 笔记
    （可按分类放进子文件夹，如 `前端部分/Vue.md`；文件夹名会自动成为笔记分类）
 2. 双击根目录的 **`提交笔记.bat`**，输入一次提交说明
 3. 脚本依次提交两个笔记仓库 → 拉取远端 → 推送，最后提交站点源码；打开网站点「重新同步」即可看到
@@ -59,8 +63,8 @@ tech_doc/                              ← 站点仓库（公开）
 
 | 页签 | Owner | Repo | Branch | 笔记目录 |
 | --- | --- | --- | --- | --- |
-| 技术 | `godspead0` | `godspead0_understand` | `master` | `全栈` |
-| 算法 | `godspead0` | `godspead0_algorithm` | `main` | （留空 = 仓库根目录） |
+| 技术 | `your-name` | `my-tech-notes` | `master` | `全栈` |
+| 算法 | `your-name` | `my-algo-notes` | `main` | （留空 = 仓库根目录） |
 
 | 字段 | 值 |
 | --- | --- |
@@ -68,7 +72,7 @@ tech_doc/                              ← 站点仓库（公开）
 
 Token 只保存在浏览器 `localStorage`，不会上传到任何服务器。
 建议使用 **fine-grained Token**，在 Repository access 里同时勾选
-`godspead0_understand` 与 `godspead0_algorithm` 两个仓库、
+`my-tech-notes` 与 `my-algo-notes` 两个仓库、
 权限选 **Contents: Read and write**。
 
 > ⚠️ 私有仓库必须填 Token 才能读取；请只在私人设备上使用。

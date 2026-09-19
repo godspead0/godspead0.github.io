@@ -6,10 +6,15 @@
 Personal Access Token（PAT）调用 GitHub Contents API，把 Markdown 笔记、打卡记录、
 分类元数据**双向同步**到你指定的数据仓库。
 
-- 站点源码：本仓库 `godspead0/godspead0.github.io`（用户站点仓库，发布在**站点根路径**）
+- 站点源码：本仓库 `your-name/godspead0.github.io`（用户站点仓库，发布在**站点根路径**）
 - 访问地址：`https://godspead0.github.io/`
-- 数据仓库示例：`https://github.com/godspead0/godspead0_understand`（技术笔记，私有）
-  与 `https://github.com/godspead0/godspead0_algorithm`（算法笔记，私有）
+- 数据仓库示例：`https://github.com/your-name/my-tech-notes`（技术笔记，私有）
+  与 `https://github.com/your-name/my-algo-notes`（算法笔记，私有）
+
+> **关于占位符**：`your-name` / `my-tech-notes` / `my-algo-notes` / `my-algo-notes-dir`
+> 都是**占位符，不是真实仓库名**。站点是公开的，因此代码里刻意**不预填**
+> Owner / Repo / Branch / 笔记目录 —— 这些默认值会显示给任何访客。
+> 真实值只存在于浏览器 `localStorage`，每台设备首次配置时手动填一次。
 
 > Vite 已配置 `base: './'`（相对路径），因此无论发布在根路径还是 `/<repo>/` 子路径下都能正常加载资源。
 
@@ -117,13 +122,13 @@ notes-manager/
 
 | 页签 | 仓库 | 默认分支 | 笔记目录 |
 | --- | --- | --- | --- |
-| 技术 | `godspead0_understand`（私有） | `master` | `全栈/` |
-| 算法 | `godspead0_algorithm`（私有） | `main` | 仓库根目录 |
+| 技术 | `my-tech-notes`（私有） | `master` | `全栈/` |
+| 算法 | `my-algo-notes`（私有） | `main` | 仓库根目录 |
 
 网站里 **一级分类 = 仓库（技术 / 算法）**，二级才是分类文件夹。
 
 ```text
-godspead0_understand/          # 技术笔记 · 默认分支 master
+my-tech-notes/          # 技术笔记 · 默认分支 master
 ├── 全栈/                      # ★ 笔记根目录（只扫描这里）
 │   ├── 前端部分/Vue.md        # 按分类建文件夹，文件夹名 = 笔记分类
 │   ├── 后端部分/spring框架/SpringBoot.md
@@ -133,7 +138,7 @@ godspead0_understand/          # 技术笔记 · 默认分支 master
 ├── categories.json            # 分类与标签元数据（自动创建，主仓库根目录）
 └── origin/                    # 该仓库里的其它内容（代码 .cpp / 图片等），不读取
 
-test_algorithm/                # 算法笔记 · 默认分支 main
+my-algo-notes-dir/                # 算法笔记 · 默认分支 main
 ├── 力扣/ 洛谷/ 牛客/ ...      # ★ 笔记与题解（文件夹名 = 笔记分类）
 └── {id}_{slug}.md             # 在网站里新建的算法笔记会落在仓库根目录
 ```
@@ -175,7 +180,7 @@ updated: "2026-09-02T03:30:00.000Z"
 
 ### 4.3 快速初始化数据仓库
 
-1. 在 GitHub 上创建或使用已有的笔记仓库（例如 `godspead0/godspead0_understand`），私有/公开皆可；
+1. 在 GitHub 上创建或使用已有的笔记仓库（例如 `your-name/my-tech-notes`），私有/公开皆可；
 2. 把 `examples/data-repo/` 下的三个示例文件上传进去（可选，不传也能用）；
 3. 在弹窗的「技术」页签填 `master`、「算法」页签填 `main`（各自仓库的默认分支）。
    网站内新建的笔记按当前所选仓库写入：

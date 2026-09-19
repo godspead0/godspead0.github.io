@@ -201,7 +201,7 @@ try {
   check('purge 后无法再从缓存恢复', notesApi.hydrateFromCache() === 0)
 
   // ---- 安全：仓库指纹变化时不得展示上一个仓库的缓存 ----
-  putCache({ v: 1, savedAt: 'x', lite: false, sig: 'tech:godspead0/其它仓库@master/全栈', notes: [cachedNote] })
+  putCache({ v: 1, savedAt: 'x', lite: false, sig: 'tech:some-user/other-repo@main/notes', notes: [cachedNote] })
   notesApi.notes.value = []
   check('仓库指纹不一致时丢弃缓存', notesApi.hydrateFromCache() === 0)
   check('被判定为异仓库的缓存已被删除', localStorage.getItem('notes-manager.notes.v1') === null)
@@ -327,14 +327,19 @@ try {
   )
   check('未配置时列表引导同步/新建', html.includes('还没有同步到任何笔记'))
   check('访客顶栏显示「未配置仓库」', html.includes('未配置仓库'))
-  /* 隐私核心断言：代码里不得残留任何私有仓库标识（站点是公开的） */
-  check('访客看不到 Owner 默认值', !html.includes('godspead0'))
+
+  /* 隐私核心断言：站点公开，代码里不得预填任何仓库标识。
+     这里刻意**不写死任何具体仓库名**（写了等于又把它泄露到源码里），
+     而是断言"默认值为空"+"表单无预填值" —— 将来任何新默认值都会被抓住。 */
   check(
-    '访客看不到任何私有仓库名',
-    !html.includes('godspead0_understand') && !html.includes('godspead0_algorithm'),
+    '默认仓库配置为空（不预填 Owner/Repo/Branch/笔记目录）',
+    ws.config.vaults.value.every((v) => !v.owner && !v.repo && !v.branch && !v.notesDir),
   )
-  check('访客看不到笔记目录默认值', !html.includes('全栈'))
-  check('访客看不到默认分支名', !/value="(master|main)"/.test(html))
+  check(
+    '访客看到的配置表单不含任何预填值',
+    !/<input[^>]*id="cfg-(owner|repo|branch|notesdir)"[^>]*value="[^"]+"/.test(html),
+  )
+  check('访客看到的配置表单占位提示均为通用文案', !/placeholder="[^"]*godspead0/.test(html))
 
   // 真正配置过之后，顶栏才显示仓库
   const v0 = ws.config.vaults.value[0]
@@ -476,7 +481,7 @@ try {
   if (!process.env.SMOKE_NETWORK) {
     console.log('  - 已跳过（设置 SMOKE_NETWORK=1 可开启，会向 api.github.com 发起 1 次请求）')
   } else {
-    gh.setConfig({ owner: 'godspead0', repo: 'godspead0_understand', branch: 'main', token: 'ghp_invalid_token_for_smoke' })
+    gh.setConfig({ owner: 'octocat', repo: 'my-tech-notes', branch: 'main', token: 'ghp_invalid_token_for_smoke' })
     try {
       await gh.testConnection()
       check('无效 Token 应被拒绝', false, '请求竟然成功了')
