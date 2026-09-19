@@ -28,6 +28,7 @@ import {
 } from '../services/notes.js'
 import { parseLocalMarkdownFiles } from '../services/exporter.js'
 import { toast } from './useToast.js'
+import { useConfig } from './useConfig.js'
 
 const notes = ref([])
 const loading = ref(false)
@@ -119,42 +120,56 @@ async function mapLimit(items, limit, worker) {
 }
 
 /**
- * 全量拉取笔记
+ * 全量拉取笔记（多仓库）
+ * 逐个读取已配置的 vault（技术 / 算法），合并后统一展示。
  * @param {{silent?: boolean}} [opts]
  */
 async function loadAll(opts = {}) {
   if (loading.value) return
   loading.value = true
   loadError.value = ''
-  progress.value = { done: 0, total: 0, label: `正在列出 ${NOTES_DIR}/ 目录…` }
+  progress.value = { done: 0, total: 0, label: '正在读取仓库配置…' }
 
   try {
-    // 只扫描笔记目录（数据仓库里还有代码等其它内容，避免无谓的请求）
-    const files = await listFiles(NOTES_DIR)
-    progress.value = { done: 0, total: files.length, label: `正在读取 ${files.length} 篇笔记…` }
+    const { vaults } = useConfig()
+    const enabled = vaults.value.filter((v) => v.token && v.owner && v.repo)
+    if (!enabled.length) {
+      throw new GithubError('尚未配置任何数据仓库，请先在「连接设置」中填写 Token。')
+    }
 
-    const parsed = await mapLimit(files, 5, async (file) => {
-      try {
-        const cached = fileCache.get(file.path)
-        if (cached && cached.sha === file.sha) {
+    const merged = []
+    for (const vault of enabled) {
+      // 只扫描该仓库的笔记目录（算法仓库在根目录，notesDir 为空串）
+      const files = await listFiles(vault.notesDir || '', 0, vault)
+      progress.value = { done: 0, total: files.length, label: `「${vault.label}」正在读取 ${files.length} 篇笔记…` }
+
+      const parsed = await mapLimit(files, 5, async (file) => {
+        try {
+          const cached = fileCache.get(file.path)
+          if (cached && cached.sha === file.sha && cached.note.vault === vault.id) {
+            progress.value = { ...progress.value, done: progress.value.done + 1 }
+            return cached.note
+          }
+          const remote = await getFile(file.path, vault)
+          if (!remote) return null
+          const note = parseNoteFile({ ...file, sha: remote.sha }, remote.content)
+          note.vault = vault.id
+          note.vaultLabel = vault.label
+          note.vaultNotesDir = vault.notesDir || ''
+          fileCache.set(file.path, { sha: remote.sha, note })
           progress.value = { ...progress.value, done: progress.value.done + 1 }
-          return cached.note
+          return note
+        } catch (err) {
+          // 单篇失败不阻断整体加载
+          toast.warn(`读取失败：${file.path}（${err?.message || err}）`)
+          progress.value = { ...progress.value, done: progress.value.done + 1 }
+          return null
         }
-        const remote = await getFile(file.path)
-        if (!remote) return null
-        const note = parseNoteFile({ ...file, sha: remote.sha }, remote.content)
-        fileCache.set(file.path, { sha: remote.sha, note })
-        progress.value = { ...progress.value, done: progress.value.done + 1 }
-        return note
-      } catch (err) {
-        // 单篇失败不阻断整体加载
-        toast.warn(`读取失败：${file.path}（${err?.message || err}）`)
-        progress.value = { ...progress.value, done: progress.value.done + 1 }
-        return null
-      }
-    })
+      })
+      merged.push(...parsed.filter(Boolean))
+    }
 
-    notes.value = parsed.filter(Boolean)
+    notes.value = merged
     hydratedFromCache.value = false
     lastSyncAt.value = new Date().toISOString()
     persistCache()
@@ -177,12 +192,17 @@ async function loadAll(opts = {}) {
 async function create(draft) {
   saving.value = true
   try {
+    const { activeVault } = useConfig()
+    const vault = activeVault.value
     const id = genId()
     const title = (draft.title || '').trim() || '未命名笔记'
     const note = createNote({ ...draft, id, title })
-    note.path = buildPath(id, title)
+    note.vault = vault.id
+    note.vaultLabel = vault.label
+    note.vaultNotesDir = vault.notesDir || ''
+    note.path = buildPath(id, title, vault.notesDir)
 
-    const { sha } = await saveFile(note.path, serializeNote(note), undefined, `create: ${note.title}`)
+    const { sha } = await saveFile(note.path, serializeNote(note), undefined, `create: ${note.title}`, vault)
     note.sha = sha
     notes.value = [note, ...notes.value]
     fileCache.set(note.path, { sha, note })
@@ -208,19 +228,21 @@ async function update(note) {
   if (!note) return null
   saving.value = true
   try {
+    const { vaults } = useConfig()
+    const vault = vaults.value.find((v) => v.id === note.vault) || vaults.value[0]
     const updated = { ...note, updated: new Date().toISOString() }
     // 仅对 SPA 托管命名的文件跟随标题改名；
     // 历史笔记按原路径原位写回，保持用户自己整理的目录结构不被搬动。
-    const nextPath = isManagedPath(updated.path) ? buildPath(updated.id, updated.title) : updated.path
+    const nextPath = isManagedPath(updated.path) ? buildPath(updated.id, updated.title, vault.notesDir) : updated.path
     const renamed = nextPath !== updated.path
     const content = serializeNote(updated)
 
     // 已存在则携带原 sha，避免覆盖他人提交
-    const { sha } = await saveFile(nextPath, content, renamed ? undefined : updated.sha, `update: ${updated.title}`)
+    const { sha } = await saveFile(nextPath, content, renamed ? undefined : updated.sha, `update: ${updated.title}`, vault)
 
     if (renamed && updated.path) {
       try {
-        await deleteFile(updated.path, updated.sha, `rename: ${note.title} -> ${updated.title}`)
+        await deleteFile(updated.path, updated.sha, `rename: ${note.title} -> ${updated.title}`, vault)
       } catch (err) {
         toast.warn(`旧文件清理失败（可忽略）：${err?.message || err}`)
       }
@@ -252,7 +274,9 @@ async function remove(note) {
   if (!note?.path) return false
   saving.value = true
   try {
-    await deleteFile(note.path, note.sha, `delete: ${note.title}`)
+    const { vaults } = useConfig()
+    const vault = vaults.value.find((v) => v.id === note.vault) || vaults.value[0]
+    await deleteFile(note.path, note.sha, `delete: ${note.title}`, vault)
     notes.value = notes.value.filter((n) => n.id !== note.id)
     fileCache.delete(note.path)
     persistCache()
@@ -286,6 +310,8 @@ async function uploadLocal(files, opts = {}) {
   progress.value = { done: 0, total: parsed.length, label: '正在上传…' }
 
   try {
+    const { activeVault } = useConfig()
+    const vault = activeVault.value
     for (const draft of parsed) {
       try {
         const id = genId()
@@ -296,9 +322,12 @@ async function uploadLocal(files, opts = {}) {
           title,
           source: opts.preserveSource === false ? '' : draft.source,
         })
-        note.path = buildPath(id, title)
+        note.vault = vault.id
+        note.vaultLabel = vault.label
+        note.vaultNotesDir = vault.notesDir || ''
+        note.path = buildPath(id, title, vault.notesDir)
         // 逐篇串行上传：内容哈希由 GitHub 计算，串行可保证 commit 顺序清晰
-        const { sha } = await saveFile(note.path, serializeNote(note), undefined, `import: ${note.title}`)
+        const { sha } = await saveFile(note.path, serializeNote(note), undefined, `import: ${note.title}`, vault)
         note.sha = sha
         notes.value = [note, ...notes.value]
         fileCache.set(note.path, { sha, note })

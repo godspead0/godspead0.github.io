@@ -16,6 +16,7 @@
 import { computed, ref } from 'vue'
 import { GithubError, getFile, saveFile } from '../services/github.js'
 import { toast } from './useToast.js'
+import { useConfig } from './useConfig.js'
 
 const CATEGORIES_PATH = 'categories.json'
 
@@ -61,7 +62,8 @@ function normalizeIncoming(raw) {
 async function load(opts = {}) {
   loading.value = true
   try {
-    const remote = await getFile(CATEGORIES_PATH)
+    const vault = useConfig().primaryVault.value
+    const remote = await getFile(CATEGORIES_PATH, vault)
     if (remote) {
       meta.value = normalizeIncoming(JSON.parse(remote.content || '{}'))
       sha.value = remote.sha
@@ -81,12 +83,14 @@ async function load(opts = {}) {
 async function persist(message = 'chore: update categories.json') {
   saving.value = true
   try {
+    const vault = useConfig().primaryVault.value
     const payload = { ...meta.value, updated: new Date().toISOString() }
     const { sha: newSha } = await saveFile(
       CATEGORIES_PATH,
       JSON.stringify(payload, null, 2),
       sha.value || undefined,
       message,
+      vault,
     )
     sha.value = newSha
     meta.value = payload

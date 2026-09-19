@@ -1,22 +1,38 @@
 <script setup>
 /**
- * 连接设置弹窗（Owner / Repo / Branch / PAT）
+ * 连接设置弹窗（多仓库：技术 / 算法）
+ * ---------------------------------------------------------------
+ * 每个仓库独立配置 Owner / Repo / Branch / 笔记目录 / PAT。
  * 凭据只保存在本机 localStorage，绝不经过任何第三方服务器。
  */
-import { computed, ref, watch } from 'vue'
+import { computed, watch } from 'vue'
 import { useConfig } from '../composables/useConfig.js'
 import AppIcon from './AppIcon.vue'
 
-const { form, testing, connected, lastError, repoInfo, saveAndTest, saveOnly, resetConfig, showModal } = useConfig()
+const {
+  form,
+  vaults,
+  editingVaultIdx,
+  editingVault,
+  testing,
+  connected,
+  lastError,
+  repoInfo,
+  saveAndTest,
+  saveOnly,
+  resetConfig,
+  switchVault,
+  showModal,
+} = useConfig()
 
-const showToken = ref(false)
-
-const tokenUrl = computed(
-  () => 'https://github.com/settings/tokens/new?scopes=repo&description=notes-manager-vault',
-)
+const tokenUrl = 'https://github.com/settings/tokens/new?scopes=repo&description=notes-manager-vault'
 const fineGrainedUrl = 'https://github.com/settings/personal-access-tokens/new'
 const repoUrl = computed(() =>
   form.owner && form.repo ? `https://github.com/${form.owner}/${form.repo}` : '',
+)
+/** 该仓库的笔记目录：空串表示仓库根目录 */
+const notesDirLabel = computed(() =>
+  form.notesDir ? `仓库内的 ${form.notesDir}/ 目录` : '仓库根目录（含子文件夹）',
 )
 
 function close() {
@@ -29,7 +45,6 @@ async function onTest() {
 
 function onReset() {
   resetConfig()
-  showToken.value = false
 }
 
 function onKey(e) {
@@ -58,10 +73,33 @@ watch(showModal, (open) => {
               连接 GitHub 数据仓库
             </h2>
             <p class="mt-1 text-xs muted">
-              纯前端直连 GitHub REST API，无自建后端。数据只写入你自己的仓库。
+              纯前端直连 GitHub REST API，无自建后端。笔记可来自多个仓库（技术 / 算法），统一聚合展示。
             </p>
           </div>
           <button class="btn btn-sm" title="关闭" @click="close"><AppIcon name="x" :size="14" /></button>
+        </div>
+
+        <!-- 仓库页签 -->
+        <div class="mb-4 flex flex-wrap gap-1.5 rounded-lg border border-[var(--app-border)] p-1">
+          <button
+            v-for="(v, i) in vaults"
+            :key="v.id"
+            class="flex flex-1 items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition"
+            :class="
+              i === editingVaultIdx
+                ? 'bg-[var(--app-accent)] text-white'
+                : 'muted hover:bg-black/5 dark:hover:bg-white/10'
+            "
+            @click="switchVault(i)"
+          >
+            <AppIcon name="book" :size="13" />
+            {{ v.label }}
+            <span
+              v-if="v.token && v.owner && v.repo"
+              class="inline-block h-1.5 w-1.5 rounded-full bg-[#1f883d]"
+              title="已配置"
+            />
+          </button>
         </div>
 
         <!-- 安全提示 -->
@@ -70,8 +108,9 @@ watch(showModal, (open) => {
             <AppIcon name="shield" :size="14" class="mt-1" />
             <span>
               Token 仅保存在本浏览器的 <code class="font-mono">localStorage</code>，不会上传到任何服务器；
-              但仍建议：<b>仅在私人设备上使用</b>，并创建<b>仅授权目标仓库 Contents: Read and write</b> 的
-              fine-grained Token。若在公共电脑使用，用完请点击「清除凭据」。
+              但两个仓库都需要访问权限（fine-grained Token 可在同一 Token 里勾选多个仓库）。
+              仍建议：<b>仅在私人设备上使用</b>，并创建<b>仅授权目标仓库 Contents: Read and write</b> 的
+              Token。若在公共电脑使用，用完请点击「清除凭据」。
             </span>
           </p>
         </div>
@@ -84,32 +123,42 @@ watch(showModal, (open) => {
           </div>
           <div>
             <label class="label" for="cfg-repo">数据仓库 Repo</label>
-            <input id="cfg-repo" v-model="form.repo" class="input" placeholder="godspead0_understand" />
+            <input
+              id="cfg-repo"
+              v-model="form.repo"
+              class="input"
+              :placeholder="editingVault?.label === '算法' ? 'godspead0_algorithm' : 'godspead0_understand'"
+            />
           </div>
           <div>
             <label class="label" for="cfg-branch">分支 Branch</label>
-            <input id="cfg-branch" v-model="form.branch" class="input" placeholder="master" />
+            <input
+              id="cfg-branch"
+              v-model="form.branch"
+              class="input"
+              :placeholder="editingVault?.label === '算法' ? 'main' : 'master'"
+            />
           </div>
           <div>
-            <label class="label" for="cfg-token">Personal Access Token</label>
-            <div class="relative">
-              <input
-                id="cfg-token"
-                v-model="form.token"
-                class="input pr-16 font-mono"
-                :type="showToken ? 'text' : 'password'"
-                placeholder="ghp_xxx 或 github_pat_xxx"
-                autocomplete="off"
-                spellcheck="false"
-              />
-              <button
-                class="absolute right-1.5 top-1/2 -translate-y-1/2 rounded px-2 py-1 text-xs muted hover:bg-black/5 dark:hover:bg-white/10"
-                type="button"
-                @click="showToken = !showToken"
-              >
-                {{ showToken ? '隐藏' : '显示' }}
-              </button>
-            </div>
+            <label class="label" for="cfg-notesdir">笔记目录（留空 = 仓库根目录）</label>
+            <input
+              id="cfg-notesdir"
+              v-model="form.notesDir"
+              class="input font-mono"
+              placeholder="全栈"
+            />
+          </div>
+          <div class="sm:col-span-2">
+            <label class="label" for="cfg-token">Personal Access Token（{{ editingVault?.label }}）</label>
+            <input
+              id="cfg-token"
+              v-model="form.token"
+              class="input font-mono"
+              type="password"
+              placeholder="ghp_xxx 或 github_pat_xxx（已保存后不会回显明文）"
+              autocomplete="off"
+              spellcheck="false"
+            />
           </div>
         </div>
 
@@ -164,8 +213,8 @@ watch(showModal, (open) => {
         </div>
 
         <p class="mt-3 text-[11px] muted">
-          默认读取仓库内的 <code class="font-mono">全栈/</code> 目录（递归，最多 6 层），
-          按分类文件夹自动归类。
+          「{{ editingVault?.label }}」默认读取 {{ notesDirLabel }} 下的全部 <code class="font-mono">.md</code>，
+          按一级子文件夹自动归类；打卡记录与分类配色存放在<b>第一个已配置的仓库</b>。
         </p>
       </div>
     </div>

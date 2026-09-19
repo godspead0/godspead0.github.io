@@ -12,6 +12,7 @@ import AppIcon from './AppIcon.vue'
 import MarkdownPreview from './MarkdownPreview.vue'
 import { countWords, normalizeTags } from '../services/notes.js'
 import { confirmDialog } from '../composables/useConfirm.js'
+import { useConfig } from '../composables/useConfig.js'
 import { downloadNote } from '../services/exporter.js'
 import { readingMinutes } from '../services/markdown.js'
 
@@ -25,6 +26,9 @@ const props = defineProps({
 })
 
 const emit = defineEmits(['close', 'submit', 'delete'])
+
+/** 多仓库：新建时可选写入哪个仓库；编辑时固定写回原仓库 */
+const config = useConfig()
 
 const title = ref('')
 const category = ref('')
@@ -216,6 +220,17 @@ function insert(before, after = '') {
             <datalist id="editor-category-options">
               <option v-for="c in categories" :key="c" :value="c" />
             </datalist>
+          </div>
+          <div class="sm:col-span-2">
+            <label class="label" for="editor-vault">保存到仓库</label>
+            <select v-if="!isEdit" id="editor-vault" v-model.number="config.activeVaultIdx.value" class="input">
+              <option v-for="(v, i) in config.vaults.value" :key="v.id" :value="i">
+                {{ v.label }}（{{ v.repo }}）
+              </option>
+            </select>
+            <p v-else class="mt-1 text-[11px] muted">
+              该笔记属于「{{ note?.vaultLabel || '原仓库' }}」，保存后仍写回原仓库，不会跨仓库搬家。
+            </p>
           </div>
           <div class="sm:col-span-2">
             <label class="label" for="editor-tags">标签（Enter / 逗号 添加）</label>

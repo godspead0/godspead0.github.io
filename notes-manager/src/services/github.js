@@ -155,6 +155,24 @@ export function setConfig(next) {
   return currentConfig
 }
 
+/**
+ * 把 vault（多仓库配置项）归一化成 request 层需要的仓库配置。
+ * ---------------------------------------------------------------
+ * 多仓库场景下「全局 currentConfig」会被并发加载互相踩踏，
+ * 因此所有导出的 API 都支持显式传入 vault，内部一律走这个函数。
+ * 不传 vault 时退回全局配置（单仓库 / 测试场景）。
+ */
+function resolveConfig(vault) {
+  if (!vault) return currentConfig
+  return {
+    ...DEFAULT_CONFIG,
+    owner: vault.owner || DEFAULT_CONFIG.owner,
+    repo: vault.repo || DEFAULT_CONFIG.repo,
+    branch: vault.branch || DEFAULT_CONFIG.branch,
+    token: vault.token || '',
+  }
+}
+
 export function getConfig() {
   return { ...currentConfig }
 }
@@ -163,20 +181,20 @@ export function isConfigured() {
   return Boolean(currentConfig.token && currentConfig.owner && currentConfig.repo)
 }
 
-function buildHeaders(extra = {}) {
+function buildHeaders(extra = {}, cfg = currentConfig) {
   const headers = {
     Accept: 'application/vnd.github+json',
     'X-GitHub-Api-Version': '2022-11-28',
     ...extra,
   }
-  if (currentConfig.token) {
-    headers.Authorization = `Bearer ${currentConfig.token}`
+  if (cfg.token) {
+    headers.Authorization = `Bearer ${cfg.token}`
   }
   return headers
 }
 
-function contentsUrl(path) {
-  const { owner, repo } = currentConfig
+function contentsUrl(path, cfg = currentConfig) {
+  const { owner, repo } = cfg
   const clean = String(path || '').replace(/^\/+/, '').replace(/\/+$/, '')
   const base = `${API_BASE}/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/contents`
   // 根目录不加尾部斜杠，避免部分网关对 /contents/ 的 301 处理差异
@@ -190,8 +208,8 @@ function contentsUrl(path) {
  * @param {number} timeout
  * @returns {Promise<any>} 解析后的 JSON；204 返回 null
  */
-async function request(url, options = {}, timeout = DEFAULT_TIMEOUT) {
-  if (!currentConfig.token) {
+async function request(url, options = {}, timeout = DEFAULT_TIMEOUT, cfg = currentConfig) {
+  if (!cfg.token) {
     throw new GithubError('尚未配置 Personal Access Token，请先在「连接设置」中填写。', {
       code: 'NO_TOKEN',
     })
@@ -202,7 +220,7 @@ async function request(url, options = {}, timeout = DEFAULT_TIMEOUT) {
 
   let response
   try {
-    response = await fetch(url, { ...options, headers: buildHeaders(options.headers), signal: controller.signal })
+    response = await fetch(url, { ...options, headers: buildHeaders(options.headers, cfg), signal: controller.signal })
   } catch (err) {
     if (err?.name === 'AbortError') {
       throw new GithubError(`请求超时（${timeout / 1000}s）：网络较慢或被代理拦截，请检查网络后重试。`, {
@@ -257,16 +275,17 @@ async function request(url, options = {}, timeout = DEFAULT_TIMEOUT) {
  * 验证 Token / 仓库 / 分支是否可用
  * @returns {Promise<{repo: string, branch: string, private: boolean, canWrite: boolean, user: string}>}
  */
-export async function testConnection() {
-  const repoInfo = await request(`${API_BASE}/repos/${currentConfig.owner}/${currentConfig.repo}`)
+export async function testConnection(vault = null) {
+  const cfg = resolveConfig(vault)
+  const repoInfo = await request(`${API_BASE}/repos/${encodeURIComponent(cfg.owner)}/${encodeURIComponent(cfg.repo)}`, {}, DEFAULT_TIMEOUT, cfg)
   let user = ''
   try {
-    const me = await request(`${API_BASE}/user`)
+    const me = await request(`${API_BASE}/user`, {}, DEFAULT_TIMEOUT, cfg)
     user = me?.login || ''
   } catch {
     /* Token 可能是 fine-grained 且无 user 权限，忽略 */
   }
-  const branch = currentConfig.branch || repoInfo.default_branch
+  const branch = cfg.branch || repoInfo.default_branch
   return {
     repo: repoInfo.full_name,
     branch,
@@ -285,15 +304,16 @@ export async function testConnection() {
  * @param {string} path 仓库内相对路径，如 'checkins.json'
  * @returns {Promise<{content: string, sha: string, path: string} | null>} 不存在时返回 null
  */
-export async function getFile(path) {
-  const url = `${contentsUrl(path)}?ref=${encodeURIComponent(currentConfig.branch)}`
+export async function getFile(path, vault = null) {
+  const cfg = resolveConfig(vault)
+  const url = `${contentsUrl(path, cfg)}?ref=${encodeURIComponent(cfg.branch)}`
   try {
-    const data = await request(url)
+    const data = await request(url, {}, DEFAULT_TIMEOUT, cfg)
     if (!data || Array.isArray(data)) return null
 
     // 超过 1MB 的文件 Contents API 不返回 content，需要走 blob/download_url
     if (!data.content && data.size > 0) {
-      const raw = await fetch(data.download_url, { headers: buildHeaders() })
+      const raw = await fetch(data.download_url, { headers: buildHeaders({}, cfg) })
       if (!raw.ok) {
         throw new GithubError('大文件下载失败（>1MB 需走 raw 通道）。', {
           status: raw.status,
@@ -324,19 +344,20 @@ export async function getFile(path) {
  * @param {string} [message] commit message
  * @returns {Promise<{sha: string, commit: string}>}
  */
-export async function saveFile(path, content, sha, message) {
+export async function saveFile(path, content, sha, message, vault = null) {
+  const cfg = resolveConfig(vault)
   const body = {
     message: message || `${sha ? 'update' : 'create'}: ${path}`,
     content: utf8ToBase64(content),
-    branch: currentConfig.branch,
+    branch: cfg.branch,
   }
   if (sha) body.sha = sha
 
-  const data = await request(contentsUrl(path), {
+  const data = await request(contentsUrl(path, cfg), {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
-  })
+  }, DEFAULT_TIMEOUT, cfg)
 
   return { sha: data?.content?.sha || '', commit: data?.commit?.sha || '' }
 }
@@ -346,17 +367,18 @@ export async function saveFile(path, content, sha, message) {
  * @param {string} path
  * @param {string} sha
  */
-export async function deleteFile(path, sha, message) {
+export async function deleteFile(path, sha, message, vault = null) {
+  const cfg = resolveConfig(vault)
   const body = {
     message: message || `delete: ${path}`,
     sha,
-    branch: currentConfig.branch,
+    branch: cfg.branch,
   }
-  await request(contentsUrl(path), {
+  await request(contentsUrl(path, cfg), {
     method: 'DELETE',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
-  })
+  }, DEFAULT_TIMEOUT, cfg)
   return true
 }
 
@@ -365,10 +387,11 @@ export async function deleteFile(path, sha, message) {
  * @param {string} path 目录路径，空字符串表示仓库根目录
  * @returns {Promise<Array<{name: string, path: string, sha: string, size: number, type: string, download_url: string}>>}
  */
-export async function listDir(path = '') {
-  const url = `${contentsUrl(path)}?ref=${encodeURIComponent(currentConfig.branch)}`
+export async function listDir(path = '', vault = null) {
+  const cfg = resolveConfig(vault)
+  const url = `${contentsUrl(path, cfg)}?ref=${encodeURIComponent(cfg.branch)}`
   try {
-    const data = await request(url)
+    const data = await request(url, {}, DEFAULT_TIMEOUT, cfg)
     if (!Array.isArray(data)) return []
     return data.map((item) => ({
       name: item.name,
@@ -394,15 +417,15 @@ export async function listDir(path = '') {
  * @param {string} dir
  * @returns {Promise<Array|null>}
  */
-async function listFilesViaTree(dir = '') {
-  const { owner, repo, branch } = currentConfig
-  const url = `${API_BASE}/repos/${encodeURIComponent(owner)}/${encodeURIComponent(
-    repo,
-  )}/git/trees/${encodeURIComponent(branch)}?recursive=1`
+async function listFilesViaTree(dir = '', vault = null) {
+  const cfg = resolveConfig(vault)
+  const url = `${API_BASE}/repos/${encodeURIComponent(cfg.owner)}/${encodeURIComponent(
+    cfg.repo,
+  )}/git/trees/${encodeURIComponent(cfg.branch)}?recursive=1`
 
   let data
   try {
-    data = await request(url, {}, 30000)
+    data = await request(url, {}, 30000, cfg)
   } catch {
     return null
   }
@@ -434,16 +457,16 @@ async function listFilesViaTree(dir = '') {
  * @param {number} depth
  * @returns {Promise<Array>}
  */
-export async function listFiles(dir = '全栈', depth = 0) {
+export async function listFiles(dir = '全栈', depth = 0, vault = null) {
   if (depth > 6) return []
 
   // 顶层优先走 Trees API（1 次请求），失败再逐层递归
   if (depth === 0) {
-    const viaTree = await listFilesViaTree(dir)
+    const viaTree = await listFilesViaTree(dir, vault)
     if (viaTree) return viaTree
   }
 
-  const entries = await listDir(dir)
+  const entries = await listDir(dir, vault)
   const files = []
   const subdirs = []
 
@@ -460,7 +483,7 @@ export async function listFiles(dir = '全栈', depth = 0) {
   const CONCURRENCY = 4
   for (let i = 0; i < subdirs.length; i += CONCURRENCY) {
     const batch = subdirs.slice(i, i + CONCURRENCY)
-    const settled = await Promise.all(batch.map((d) => listFiles(d, depth + 1)))
+    const settled = await Promise.all(batch.map((d) => listFiles(d, depth + 1, vault)))
     results.push(...settled.flat())
   }
 
@@ -470,11 +493,12 @@ export async function listFiles(dir = '全栈', depth = 0) {
 /**
  * 读取当前仓库最新 commit 时间，用于展示"最后同步时间"
  */
-export async function getLatestCommit() {
-  const url = `${API_BASE}/repos/${currentConfig.owner}/${currentConfig.repo}/commits?sha=${encodeURIComponent(
-    currentConfig.branch,
-  )}&per_page=1`
-  const data = await request(url)
+export async function getLatestCommit(vault = null) {
+  const cfg = resolveConfig(vault)
+  const url = `${API_BASE}/repos/${encodeURIComponent(cfg.owner)}/${encodeURIComponent(
+    cfg.repo,
+  )}/commits?sha=${encodeURIComponent(cfg.branch)}&per_page=1`
+  const data = await request(url, {}, DEFAULT_TIMEOUT, cfg)
   if (Array.isArray(data) && data.length) {
     return {
       sha: data[0].sha,

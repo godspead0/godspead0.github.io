@@ -1,35 +1,121 @@
 /**
- * 连接配置 Composable
- * 负责 Owner / Repo / Branch / Token 的读写、连通性测试与在线状态。
+ * 连接配置 Composable（多数据仓库）
+ * ---------------------------------------------------------------
+ * 每个 vault 对应一个 GitHub 数据仓库（Owner / Repo / Branch / Token / notesDir）：
+ *   - 技术：godspead0_understand（全栈/）
+ *   - 算法：godspead0_algorithm（仓库根目录）
+ *
+ * - vaults    ：全部仓库配置（localStorage 持久化，自动从旧单仓库配置迁移）
+ * - form      ：连接设置弹窗里正在编辑的那个仓库
+ * - activeVault：新建笔记写入的仓库
+ * - primaryVault：打卡记录 / 分类元数据所在的主仓库（第一个已配置的）
  */
 import { computed, reactive, ref } from 'vue'
-import {
-  DEFAULT_CONFIG,
-  GithubError,
-  clearConfig as clearStoredConfig,
-  isConfigured as checkConfigured,
-  loadConfig,
-  setConfig,
-  testConnection,
-} from '../services/github.js'
+import { DEFAULT_CONFIG, GithubError, setConfig, testConnection } from '../services/github.js'
 import { toast } from './useToast.js'
 
-const form = reactive({ ...DEFAULT_CONFIG })
-const testing = ref(false)
-const connected = ref(false)
-const lastError = ref('')
-const repoInfo = ref(null)
-const showModal = ref(false)
+const STORAGE_KEY = 'notes-manager.vaults.v2'
+const LEGACY_KEY = 'notes-manager.config.v1'
 
-// 启动即从 localStorage 恢复；若缺少关键字段则自动弹出配置弹窗
-{
-  const saved = loadConfig()
-  Object.assign(form, saved)
-  setConfig(saved)
-  showModal.value = !(saved.token && saved.owner && saved.repo)
+function defaultVaults() {
+  return [
+    {
+      id: 'tech',
+      label: '技术',
+      owner: 'godspead0',
+      repo: 'godspead0_understand',
+      branch: 'master',
+      token: '',
+      notesDir: '全栈',
+    },
+    {
+      id: 'algo',
+      label: '算法',
+      owner: 'godspead0',
+      repo: 'godspead0_algorithm',
+      branch: 'main',
+      token: '',
+      notesDir: '',
+    },
+  ]
 }
 
-const configured = computed(() => Boolean(form.token && form.owner && form.repo))
+/** 读取 vaults；兼容旧的单仓库配置（notes-manager.config.v1） */
+function loadVaults() {
+  const defaults = defaultVaults()
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY)
+    if (raw) {
+      const parsed = JSON.parse(raw)
+      if (Array.isArray(parsed) && parsed.length) {
+        return parsed.map((v, i) => ({ ...(defaults[i] || {}), ...v }))
+      }
+    }
+  } catch {
+    /* 损坏数据按未配置处理 */
+  }
+  // 迁移旧版单仓库配置
+  try {
+    const legacy = localStorage.getItem(LEGACY_KEY)
+    if (legacy) {
+      const old = JSON.parse(legacy)
+      if (old && old.owner && old.repo) {
+        const vaults = defaultVaults()
+        vaults[0] = {
+          ...vaults[0],
+          owner: old.owner,
+          repo: old.repo,
+          branch: old.branch || 'master',
+          token: old.token || '',
+        }
+        return vaults
+      }
+    }
+  } catch {
+    /* 忽略 */
+  }
+  return defaults
+}
+
+const vaults = ref(loadVaults())
+const editingVaultIdx = ref(0)
+const activeVaultIdx = ref(0)
+
+/** 弹窗表单：始终反映「正在编辑的仓库」 */
+const form = reactive({ ...(vaults.value[editingVaultIdx.value] || vaults.value[0]) })
+
+const editingVault = computed(() => vaults.value[editingVaultIdx.value] || vaults.value[0])
+const activeVault = computed(() => vaults.value[activeVaultIdx.value] || vaults.value[0])
+/** 打卡 / 分类元数据所在的主仓库 = 第一个已配置的仓库 */
+const primaryVault = computed(
+  () => vaults.value.find((v) => v.token && v.owner && v.repo) || vaults.value[0],
+)
+const configured = computed(() => vaults.value.some((v) => v.token && v.owner && v.repo))
+
+function persist() {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(vaults.value))
+  } catch {
+    /* 隐私模式忽略 */
+  }
+}
+
+/** 把 form 写回正在编辑的 vault */
+function syncFormToVault() {
+  Object.assign(editingVault.value, { ...form })
+}
+
+/** 弹窗切换编辑目标仓库 */
+function switchVault(idx) {
+  syncFormToVault()
+  editingVaultIdx.value = Math.max(0, Math.min(Number(idx) || 0, vaults.value.length - 1))
+  Object.assign(form, { ...vaults.value[editingVaultIdx.value] })
+}
+
+/** 设置「新建笔记写入哪个仓库」 */
+function setActiveVault(idx) {
+  activeVaultIdx.value = Math.max(0, Math.min(Number(idx) || 0, vaults.value.length - 1))
+}
 
 /** 校验表单本地合法性（不发起网络请求） */
 function validate() {
@@ -63,17 +149,21 @@ async function saveAndTest() {
     return false
   }
   normalize()
+  syncFormToVault()
+  persist()
+  setConfig({ ...form }) // 同步内存配置，供无显式 vault 的调用使用
+
   testing.value = true
   lastError.value = ''
-  setConfig({ ...form }) // 先落库，request 层才能取到 token
-
   try {
-    const info = await testConnection()
+    const info = await testConnection(editingVault.value)
     repoInfo.value = info
     connected.value = true
     if (!form.branch) form.branch = info.branch
+    Object.assign(editingVault.value, { branch: form.branch })
+    persist()
     setConfig({ ...form })
-    toast.success(`连接成功：${info.repo} @ ${info.branch}（${info.private ? '私有' : '公开'}仓库）`)
+    toast.success(`「${editingVault.value.label}」连接成功：${info.repo} @ ${info.branch}（${info.private ? '私有' : '公开'}仓库）`)
     showModal.value = false
     return true
   } catch (e) {
@@ -96,15 +186,18 @@ function saveOnly() {
     return false
   }
   normalize()
+  syncFormToVault()
+  persist()
   setConfig({ ...form })
   lastError.value = ''
-  toast.info('配置已保存到本地浏览器')
+  toast.info(`「${editingVault.value.label}」配置已保存到本地浏览器`)
   return true
 }
 
 function resetConfig() {
-  clearStoredConfig()
-  Object.assign(form, DEFAULT_CONFIG)
+  vaults.value = defaultVaults()
+  persist()
+  Object.assign(form, { ...vaults.value[editingVaultIdx.value] })
   setConfig({ ...DEFAULT_CONFIG })
   connected.value = false
   repoInfo.value = null
@@ -112,8 +205,24 @@ function resetConfig() {
   toast.info('已清除本地凭据')
 }
 
+const testing = ref(false)
+const connected = ref(false)
+const lastError = ref('')
+const repoInfo = ref(null)
+const showModal = ref(false)
+
+// 启动即恢复；没有任何仓库配置时自动弹出配置弹窗
+showModal.value = !configured.value
+
 export function useConfig() {
   return {
+    vaults,
+    editingVaultIdx,
+    activeVaultIdx,
+    editingVault,
+    activeVault,
+    primaryVault,
+    // 表单与状态
     form,
     testing,
     connected,
@@ -121,10 +230,12 @@ export function useConfig() {
     repoInfo,
     showModal,
     configured,
-    isConfigured: checkConfigured,
+    // 动作
     saveAndTest,
     saveOnly,
     resetConfig,
+    switchVault,
+    setActiveVault,
     openModal: () => (showModal.value = true),
   }
 }

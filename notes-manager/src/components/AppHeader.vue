@@ -77,12 +77,16 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
         <input
           ref="searchInput"
           v-model="keyword"
-          class="input pl-8 pr-16"
+          class="input pl-8 pr-24"
           type="search"
           placeholder="搜索标题 / 标签 / 正文…（/ 或 Ctrl+K 聚焦）"
           autocomplete="off"
         />
         <div class="absolute right-1.5 top-1/2 flex -translate-y-1/2 items-center gap-1">
+          <button class="btn btn-sm" title="搜索（输入即实时过滤，无需回车）" @click="searchInput?.focus()">
+            <AppIcon name="search" :size="12" />
+            <span class="hidden sm:inline">搜索</span>
+          </button>
           <span v-if="hasActiveFilter" class="text-[11px] muted">{{ filteredCount }} 条</span>
           <button v-if="keyword" class="btn btn-sm" title="清空搜索" @click="keyword = ''">
             <AppIcon name="x" :size="12" />
@@ -120,11 +124,12 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
         <button
           class="btn btn-sm"
           :class="ws.checkins.checkedToday.value ? 'border-[#1f883d] text-[#1f883d]' : ''"
-          :title="ws.checkins.checkedToday.value ? '今日已打卡' : '今日一键打卡'"
+          :disabled="ws.checkins.checkedToday.value"
+          :title="ws.checkins.checkedToday.value ? '今日已打卡（每天仅限一次）' : '今日一键打卡'"
           @click="ws.checkins.checkIn(1)"
         >
           <AppIcon name="flame" :size="14" />
-          <span class="hidden sm:inline">{{ ws.checkins.todayCount.value }}</span>
+          <span class="hidden sm:inline">{{ ws.checkins.checkedToday.value ? '已打卡' : ws.checkins.todayCount.value }}</span>
         </button>
 
         <button class="btn btn-sm" :title="isDark ? '切换到浅色' : '切换到深色'" @click="toggleTheme">

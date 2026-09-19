@@ -231,6 +231,43 @@ try {
   check('时间线归档按年月分组', s.archiveTree.value.length === 2 && s.archiveTree.value[0].key === '2026-09')
   check('活跃筛选状态可识别', (s.clearFilters(), s.hasActiveFilter.value === false))
 
+  /* 2.9 多仓库（技术 / 算法）：一级分类 */
+  check('buildPath 默认写入 全栈/ 目录', notesSvc.buildPath('1', '标题') === '全栈/1_标题.md')
+  check('buildPath 支持仓库根目录（算法仓库）', notesSvc.buildPath('1', '标题', '') === '1_标题.md')
+  check('buildPath 支持自定义目录', notesSvc.buildPath('1', '标题', '算法') === '算法/1_标题.md')
+  check('buildPath 容错首尾斜杠', notesSvc.buildPath('1', '标题', '/算法/') === '算法/1_标题.md')
+
+  const vaultNotes = ref([
+    notesSvc.createNote({ id: 'v1', title: 'MySQL 索引', category: '数据库部分', tags: ['mysql'], body: 'B+ 树', created: '2026-09-01T00:00:00.000Z' }),
+    notesSvc.createNote({ id: 'v2', title: '二分查找', category: '力扣', tags: ['二分'], body: 'log n', created: '2026-09-02T00:00:00.000Z' }),
+    notesSvc.createNote({ id: 'v3', title: '最短路', category: '洛谷', tags: ['图论'], body: 'dijkstra', created: '2026-09-03T00:00:00.000Z' }),
+  ])
+  vaultNotes.value[0].vault = 'tech'
+  vaultNotes.value[0].vaultLabel = '技术'
+  vaultNotes.value[1].vault = 'algo'
+  vaultNotes.value[1].vaultLabel = '算法'
+  vaultNotes.value[2].vault = 'algo'
+  vaultNotes.value[2].vaultLabel = '算法'
+
+  const vs = useSearch(vaultNotes)
+  check('仓库树聚合出技术/算法两项', vs.vaultTree.value.length === 2, `实际 ${vs.vaultTree.value.length}`)
+  check('仓库树统计各仓库笔记数', vs.vaultTree.value.find((v) => v.id === 'algo')?.count === 2)
+  check('仓库树带出中文标签', vs.vaultTree.value.find((v) => v.id === 'tech')?.label === '技术')
+
+  vs.selectVault('algo')
+  check('选中算法仓库后只剩 2 篇', vs.results.value.length === 2, `实际 ${vs.results.value.length}`)
+  check('仓库筛选联动分类树（不混入技术分类）', vs.categoryTree.value.every((c) => c.name !== '数据库部分'))
+  check('仓库筛选计入活跃筛选状态', vs.hasActiveFilter.value === true)
+  check('仓库筛选联动标签树', vs.tagTree.value.every((t) => t.name !== 'mysql'))
+  vs.selectVault('algo')
+  check('再次点击仓库可取消筛选', vs.results.value.length === 3 && vs.activeVault.value === '')
+
+  vs.selectVault('tech')
+  check('切到技术仓库只剩 1 篇', vs.results.value.length === 1 && vs.results.value[0].id === 'v1')
+  vs.clearFilters()
+  check('清除筛选同时重置仓库维度', vs.activeVault.value === '')
+  check('无 vault 字段的笔记不进仓库树', useSearch(ref([notesSvc.createNote({ id: 'x', title: '裸笔记' })])).vaultTree.value.length === 0)
+
   console.log('\n[3] 组件树 SSR 渲染')
   const { createSSRApp } = await import('vue')
   const { renderToString } = await import('vue/server-renderer')
@@ -252,6 +289,10 @@ try {
   check('渲染出搜索框', html.includes('搜索标题'))
   check('渲染出打卡热力图组件', html.includes('打卡热力图'))
   check('未配置时渲染连接设置弹窗', html.includes('连接 GitHub 数据仓库'))
+  check(
+    '配置弹窗渲染技术/算法两个仓库页签',
+    html.includes('笔记目录（留空 = 仓库根目录）') && html.includes('技术') && html.includes('算法'),
+  )
   check('未配置时列表引导同步/新建', html.includes('还没有同步到任何笔记'))
 
   /* 3.2 注入数据：列表 / 侧栏筛选树 / 归档 / 仪表盘 */
@@ -293,9 +334,20 @@ try {
   ]
   ws.checkins.data.value = { [notesSvc.toDateKey()]: 3, '2026-09-01': 2 }
 
+  // 打上多仓库标记：1/2 来自技术仓库，3 来自算法仓库
+  ws.notes.value[0].vault = 'tech'
+  ws.notes.value[0].vaultLabel = '技术'
+  ws.notes.value[1].vault = 'tech'
+  ws.notes.value[1].vaultLabel = '技术'
+  ws.notes.value[2].vault = 'algo'
+  ws.notes.value[2].vaultLabel = '算法'
+
   html = await renderApp()
   check('列表渲染出笔记卡片', html.includes('Vue3 响应式原理') && html.includes('Redis 持久化'))
   check('侧栏渲染分类树', html.includes('前端部分') && html.includes('中间件部分'))
+  check('侧栏渲染仓库（技术/算法）一级分类', html.includes('仓库') && html.includes('技术') && html.includes('算法'))
+  const algoHits = (html.match(/算法/g) || []).length
+  check('算法笔记带仓库徽章（侧栏 + 卡片）', algoHits >= 2, `实际 ${algoHits} 处`)
   check('侧栏渲染时间线归档「2026年9月」', html.includes('2026年9月'))
   check('侧栏渲染未分类分组', html.includes('未分类'))
   check('侧栏渲染标签云', html.includes('#vue') && html.includes('#redis'))
@@ -315,6 +367,7 @@ try {
     '新建笔记弹窗渲染完整表单',
     html.includes('新建笔记') && html.includes('标签（Enter / 逗号 添加）') && html.includes('创建并同步'),
   )
+  check('新建笔记可选保存到的仓库', html.includes('保存到仓库') && html.includes('godspead0_algorithm'))
   ws.closeEditor()
 
   ws.openEdit(ws.notes.value[1])

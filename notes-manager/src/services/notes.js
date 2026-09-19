@@ -31,8 +31,10 @@ export function slugify(title) {
 }
 
 /** 由 id + 标题构造仓库内相对路径 */
-export function buildPath(id, title) {
-  return `${NOTES_DIR}/${id}_${slugify(title)}.md`
+export function buildPath(id, title, dir = NOTES_DIR) {
+  const name = `${id}_${slugify(title)}.md`
+  const base = String(dir || '').replace(/^\/+|\/+$/g, '')
+  return base ? `${base}/${name}` : name
 }
 
 /** 由路径解析出 id（容错：老文件可能没有 id 前缀） */

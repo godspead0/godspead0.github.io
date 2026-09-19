@@ -16,8 +16,14 @@ const emit = defineEmits(['close'])
 const ws = useWorkspace()
 
 const categoryColor = computed(() => ws.categories.colorFor(props.note?.category || '未分类', 'category'))
+
+/** 用「这篇笔记所属的仓库」拼 GitHub 链接（多仓库下不能只看当前表单） */
+const noteVault = computed(() => {
+  const list = ws.config.vaults.value
+  return list.find((v) => v.id === props.note?.vault) || ws.config.primaryVault.value || ws.config.form
+})
 const githubUrl = computed(() => {
-  const { owner, repo, branch } = ws.config.form
+  const { owner, repo, branch } = noteVault.value || {}
   if (!owner || !repo || !props.note?.path) return ''
   return `https://github.com/${owner}/${repo}/blob/${branch || 'master'}/${props.note.path}`
 })
@@ -39,6 +45,13 @@ const minutes = computed(() => readingMinutes(props.note?.body))
           <div class="min-w-0 flex-1">
             <h2 class="truncate text-lg font-semibold">{{ note.title }}</h2>
             <div class="mt-1 flex flex-wrap items-center gap-2 text-[11px] muted">
+              <span
+                v-if="note.vaultLabel"
+                class="rounded-full px-2 py-0.5 font-semibold text-[#8250df]"
+                style="background: rgba(130, 80, 223, 0.12)"
+              >
+                {{ note.vaultLabel }}
+              </span>
               <span
                 v-if="note.category"
                 class="rounded-full px-2 py-0.5 font-medium"

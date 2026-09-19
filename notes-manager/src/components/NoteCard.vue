@@ -47,6 +47,13 @@ function onOpen() {
         <div class="flex flex-wrap items-center gap-2">
           <h3 class="truncate text-sm font-semibold">{{ note.title }}</h3>
           <span
+            v-if="note.vaultLabel && note.vault !== 'tech'"
+            class="rounded-full px-2 py-0.5 text-[10px] font-semibold text-[#8250df]"
+            style="background: rgba(130, 80, 223, 0.12)"
+          >
+            {{ note.vaultLabel }}
+          </span>
+          <span
             v-if="note.category"
             class="rounded-full px-2 py-0.5 text-[10px] font-medium"
             :style="{ background: `${categoryColor}22`, color: categoryColor }"

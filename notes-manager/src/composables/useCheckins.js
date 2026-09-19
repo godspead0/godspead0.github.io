@@ -13,6 +13,7 @@ import { computed, ref } from 'vue'
 import { GithubError, getFile, saveFile } from '../services/github.js'
 import { toDateKey } from '../services/notes.js'
 import { toast } from './useToast.js'
+import { useConfig } from './useConfig.js'
 
 const CHECKINS_PATH = 'checkins.json'
 const FLUSH_DELAY = 1200
@@ -111,7 +112,8 @@ async function load(opts = {}) {
   loading.value = true
   lastError.value = ''
   try {
-    const remote = await getFile(CHECKINS_PATH)
+    const vault = useConfig().primaryVault.value
+    const remote = await getFile(CHECKINS_PATH, vault)
     if (remote) {
       const parsed = JSON.parse(remote.content || '{}')
       data.value = parsed && typeof parsed === 'object' ? parsed : {}
@@ -155,6 +157,7 @@ async function flush(attempt = 0) {
   const delta = pendingDelta
   pendingDelta = 0
   const snapshot = { ...data.value }
+  const vault = useConfig().primaryVault.value
 
   try {
     const { sha: newSha } = await saveFile(
@@ -162,6 +165,7 @@ async function flush(attempt = 0) {
       JSON.stringify(snapshot, null, 2),
       sha.value || undefined,
       `checkin: +${delta} (${today.value})`,
+      vault,
     )
     sha.value = newSha
     writeCache(snapshot)
@@ -171,7 +175,7 @@ async function flush(attempt = 0) {
     // 3600 冲突：远端被别处更新，重新拉取后合并重试一次
     if (err instanceof GithubError && (err.status === 409 || err.status === 422) && attempt < 2) {
       try {
-        const remote = await getFile(CHECKINS_PATH)
+        const remote = await getFile(CHECKINS_PATH, vault)
         if (remote) {
           const remoteData = JSON.parse(remote.content || '{}')
           // 合并：逐日取较大值，防止本地回退远端
@@ -215,6 +219,11 @@ function scheduleFlush() {
  */
 async function checkIn(n = 1, opts = {}) {
   const key = opts.date || today.value
+  // 每天只能打一次卡：今天已打卡则拒绝再次打卡（手动与自动均生效）
+  if (key === today.value && Number(data.value[key] || 0) > 0) {
+    if (!opts.silent) toast.info('今日已打卡，每天仅限一次')
+    return false
+  }
   data.value = { ...data.value, [key]: Number(data.value[key] || 0) + n }
   pendingDelta += n
   checkedToday.value = todayCount.value > 0

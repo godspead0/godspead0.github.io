@@ -12,10 +12,12 @@ const ws = useWorkspace()
 const { notes } = ws
 const {
   keyword,
+  activeVault,
   activeCategory,
   activeTags,
   activeMonth,
   onlyUntagged,
+  vaultTree,
   categoryTree,
   tagTree,
   archiveTree,
@@ -23,10 +25,28 @@ const {
   toggleTag,
   isTagActive,
   selectCategory,
+  selectVault,
   clearFilters,
 } = useSearch(notes)
 
-const collapsed = ref({ categories: false, tags: false, archive: false, tools: false })
+/** 仓库配色（与卡片徽章保持一致） */
+const VAULT_COLORS = { tech: '#0969da', algo: '#8250df' }
+function vaultColor(id) {
+  return VAULT_COLORS[id] || '#8b949e'
+}
+
+/** 点击仓库：既筛选列表，也把它设为「新建笔记」的目标仓库 */
+function pickVault(v) {
+  selectVault(v.id)
+  const idx = ws.config.vaults.value.findIndex((x) => x.id === v.id)
+  if (idx >= 0) ws.config.setActiveVault(idx)
+}
+
+const activeVaultLabel = computed(
+  () => vaultTree.value.find((v) => v.id === activeVault.value)?.label || activeVault.value,
+)
+
+const collapsed = ref({ vaults: false, categories: false, tags: false, archive: false, tools: false })
 const archiveOpen = ref({})
 
 const totalCount = computed(() => notes.value.length)
@@ -62,6 +82,7 @@ function pickAll() {
 const activeSummary = computed(() => {
   const parts = []
   if (keyword.value.trim()) parts.push(`关键词「${keyword.value.trim()}」`)
+  if (activeVault.value) parts.push(`仓库「${activeVaultLabel.value}」`)
   if (activeCategory.value) parts.push(`分类「${activeCategory.value}」`)
   if (onlyUntagged.value) parts.push('未分类')
   if (activeTags.value.length) parts.push(`标签 ${activeTags.value.map((t) => `#${t}`).join(' ')}`)
@@ -94,6 +115,30 @@ const activeSummary = computed(() => {
         <p>{{ activeSummary.join(' · ') }}</p>
         <button class="mt-1 flex items-center gap-1 text-[var(--app-accent)] hover:underline" @click="clearFilters">
           <AppIcon name="x" :size="11" /> 清除筛选
+        </button>
+      </div>
+    </div>
+
+    <!-- 仓库（一级分类）：技术 / 算法 -->
+    <div v-if="vaultTree.length > 1" class="section">
+      <button class="section-head" @click="toggleSection('vaults')">
+        <AppIcon :name="collapsed.vaults ? 'chevron-right' : 'chevron-down'" :size="13" />
+        <AppIcon name="book" :size="13" />
+        <span class="flex-1 text-left">仓库</span>
+        <span class="count">{{ vaultTree.length }}</span>
+      </button>
+      <div v-show="!collapsed.vaults" class="pl-1">
+        <button
+          v-for="v in vaultTree"
+          :key="v.id"
+          class="row"
+          :class="{ active: activeVault === v.id }"
+          :title="`只看「${v.label}」的笔记；同时新建笔记会写入该仓库`"
+          @click="pickVault(v)"
+        >
+          <span class="dot" :style="{ background: vaultColor(v.id) }" />
+          <span class="flex-1 truncate text-left">{{ v.label }}</span>
+          <span class="count">{{ v.count }}</span>
         </button>
       </div>
     </div>

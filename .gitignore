@@ -14,12 +14,16 @@ npm-debug.log*
 /godspead0.github.io/
 
 # ============ 笔记数据 ============
-# 笔记存放在独立私有仓库 godspead0_understand 的 全栈/ 目录下。
-# 本地克隆位于站点目录之外：D:\vscode_test_all\godspead0_understand
-# （由「提交笔记.bat」负责提交推送）。
-# 下面这行只是保险：万一克隆又被放回本站点目录，也不会被推到公开仓库。
+# 笔记存放在独立私有仓库里，本地克隆位于站点目录之外：
+#   技术笔记 D:\vscode_test_all\godspead0_understand  -> godspead0_understand 的 全栈/
+#   算法笔记 D:\vscode_test_all\test_algorithm        -> godspead0_algorithm 的 仓库根目录
+# （由「提交笔记.bat」负责依次提交推送）。
+# 下面两行只是保险：万一克隆又被放回本站点目录，也不会被推到公开仓库。
 /godspead0_understand/
+/test_algorithm/
 
-# ============ 系统文件 ============
+# ============ 系统 / 编辑器文件 ============
 .DS_Store
 Thumbs.db
+.vscode/
+.obsidian/

@@ -18,6 +18,7 @@ const activeMonth = ref('') // 'YYYY-MM'，空串 = 全部
 const sortBy = ref('updated') // updated | created | title
 const sortOrder = ref('desc') // asc | desc
 const onlyUntagged = ref(false)
+const activeVault = ref('') // 仓库（技术 / 算法），空串 = 全部
 
 /* ---------------- Fuse 实例（懒建 + 缓存） ---------------- */
 const fuse = shallowRef(null)
@@ -59,6 +60,8 @@ export function useSearch(notesRef) {
   const filtered = computed(() => {
     const tags = activeTags.value
     return searched.value.filter((note) => {
+      // 仓库维度（技术 / 算法）—— 最外层的"一级分类"
+      if (activeVault.value && note.vault !== activeVault.value) return false
       if (activeCategory.value && note.category !== activeCategory.value) return false
       if (activeMonth.value) {
         const d = new Date(note.created || note.updated || Date.now())
@@ -66,7 +69,8 @@ export function useSearch(notesRef) {
         const month = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
         if (month !== activeMonth.value) return false
       }
-      if (onlyUntagged.value && (note.tags || []).length > 0) return false
+      // 未分类筛选：只展示「没有分类」的笔记（之前错误地检查了 tags）
+      if (onlyUntagged.value && note.category) return false
       if (tags.length) {
         const own = new Set((note.tags || []).map((t) => t.toLowerCase()))
         // AND：必须同时包含所有选中标签
@@ -91,11 +95,38 @@ export function useSearch(notesRef) {
 
   /* ---------------- 侧边栏筛选树 ---------------- */
 
+  /**
+   * 仓库树（一级分类）：{ id, label, count }[]
+   * 从笔记的 vault / vaultLabel 字段推导，因此无需依赖配置模块。
+   */
+  const vaultTree = computed(() => {
+    const map = new Map()
+    for (const note of notesRef.value || []) {
+      const key = note.vault
+      if (!key) continue
+      const found = map.get(key)
+      if (found) found.count += 1
+      else map.set(key, { id: key, label: note.vaultLabel || key, count: 1 })
+    }
+    return [...map.values()]
+  })
+
+  /**
+   * 只看「当前选中仓库」的集合，供侧栏各棵树统计。
+   * 这样选中「算法」后，分类树里不会混入技术仓库的分类；
+   * 同时树的统计不随分类/标签自身收缩，便于反复切换。
+   */
+  const vaultScope = computed(() => {
+    const list = notesRef.value || []
+    if (!activeVault.value) return list
+    return list.filter((n) => n.vault === activeVault.value)
+  })
+
   /** 分类树：{ name, count }[]，按计数降序 */
   const categoryTree = computed(() => {
     const map = new Map()
     let uncategorized = 0
-    for (const note of notesRef.value || []) {
+    for (const note of vaultScope.value) {
       const key = note.category || ''
       if (!key) {
         uncategorized += 1
@@ -113,7 +144,7 @@ export function useSearch(notesRef) {
   /** 标签云：{ name, count }[]，按计数降序 */
   const tagTree = computed(() => {
     const map = new Map()
-    for (const note of notesRef.value || []) {
+    for (const note of vaultScope.value) {
       for (const tag of note.tags || []) {
         map.set(tag, (map.get(tag) || 0) + 1)
       }
@@ -130,7 +161,7 @@ export function useSearch(notesRef) {
    */
   const archiveTree = computed(() => {
     const map = new Map()
-    for (const note of notesRef.value || []) {
+    for (const note of vaultScope.value) {
       const d = new Date(note.created || note.updated || Date.now())
       if (Number.isNaN(d.getTime())) continue
       const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
@@ -156,6 +187,7 @@ export function useSearch(notesRef) {
   const hasActiveFilter = computed(
     () =>
       Boolean(keyword.value.trim()) ||
+      Boolean(activeVault.value) ||
       Boolean(activeCategory.value) ||
       Boolean(activeMonth.value) ||
       activeTags.value.length > 0 ||
@@ -178,8 +210,14 @@ export function useSearch(notesRef) {
     onlyUntagged.value = name === '未分类' ? !onlyUntagged.value : false
   }
 
+  /** 选择仓库（一级分类）；再次点击取消 */
+  function selectVault(id) {
+    activeVault.value = activeVault.value === id ? '' : id
+  }
+
   function clearFilters() {
     keyword.value = ''
+    activeVault.value = ''
     activeCategory.value = ''
     activeTags.value = []
     activeMonth.value = ''
@@ -213,9 +251,11 @@ export function useSearch(notesRef) {
     sortBy,
     sortOrder,
     onlyUntagged,
+    activeVault,
     // 派生
     results,
     filteredCount: computed(() => results.value.length),
+    vaultTree,
     categoryTree,
     tagTree,
     archiveTree,
@@ -225,6 +265,7 @@ export function useSearch(notesRef) {
     toggleTag,
     isTagActive,
     selectCategory,
+    selectVault,
     clearFilters,
     toggleSort,
   }

@@ -1,98 +1,122 @@
 @echo off
 chcp 65001 >nul
 setlocal
-title 提交笔记
+title 提交笔记（技术 + 算法）
 
 cd /d "%~dp0"
 
 set "ROOT=%~dp0"
-rem 笔记仓库使用你原有的克隆（与站点目录同级，不在站点仓库内部）
-set "VAULT=D:\vscode_test_all\godspead0_understand"
-set "VAULT_REMOTE=https://github.com/godspead0/godspead0_understand.git"
-set "VAULT_BRANCH=master"
+
+rem ==================== 笔记仓库（与站点目录同级，不在站点仓库内部）====================
+rem 技术笔记：笔记位于 全栈/ 目录
+set "TECH_DIR=D:\vscode_test_all\godspead0_understand"
+set "TECH_REMOTE=https://github.com/godspead0/godspead0_understand.git"
+set "TECH_BRANCH=master"
+set "TECH_LABEL=技术笔记"
+
+rem 算法笔记：笔记直接位于仓库根目录
+set "ALGO_DIR=D:\vscode_test_all\test_algorithm"
+set "ALGO_REMOTE=https://github.com/godspead0/godspead0_algorithm.git"
+set "ALGO_BRANCH=main"
+set "ALGO_LABEL=算法笔记"
 
 echo ============================================================
-echo                    笔记提交助手
+echo               笔记提交助手（技术 + 算法）
 echo ============================================================
 echo   站点目录：%ROOT%
-echo   笔记仓库：%VAULT%  (分支 %VAULT_BRANCH%)
+echo   技术笔记：%TECH_DIR%   (分支 %TECH_BRANCH%)
+echo   算法笔记：%ALGO_DIR%   (分支 %ALGO_BRANCH%)
 echo ============================================================
 echo.
 
 where git >nul 2>nul
 if errorlevel 1 goto :no_git
 
-rem ==================== 第一步：提交并推送笔记 ====================
-echo [1/2] 同步笔记到私有仓库 godspead0_understand ...
+set "MSG="
+set /p "MSG=请输入本次提交说明（直接回车使用默认）："
+if "%MSG%"=="" set "MSG=更新笔记 %date%"
 echo.
 
-if exist "%VAULT%\.git" goto :vault_ready
-echo       未找到本地笔记仓库，正在克隆 ...
-git clone "%VAULT_REMOTE%" "%VAULT%"
-if errorlevel 1 goto :clone_fail
-echo.
+call :sync_vault "%TECH_DIR%" "%TECH_REMOTE%" "%TECH_BRANCH%" "%TECH_LABEL%" "%MSG%" "1/3"
+if errorlevel 1 goto :vault_fail
 
-:vault_ready
-pushd "%VAULT%"
+call :sync_vault "%ALGO_DIR%" "%ALGO_REMOTE%" "%ALGO_BRANCH%" "%ALGO_LABEL%" "%MSG%" "2/3"
+if errorlevel 1 goto :vault_fail
 
+goto :site
+
+rem ==================== 子过程：同步单个笔记仓库 ====================
+rem 参数：%1=目录 %2=远端 %3=分支 %4=名称 %5=提交说明 %6=步骤号
+:sync_vault
+set "V_DIR=%~1"
+set "V_REMOTE=%~2"
+set "V_BRANCH=%~3"
+set "V_LABEL=%~4"
+set "V_MSG=%~5"
+
+echo [%6] 同步%V_LABEL% ...
+if exist "%V_DIR%\.git" goto :sv_ready
+
+echo       未找到本地仓库，正在克隆 ...
+git clone "%V_REMOTE%" "%V_DIR%"
+if errorlevel 1 goto :sv_clone_fail
+
+:sv_ready
+pushd "%V_DIR%"
 git add -A
 git diff --cached --quiet
-if not errorlevel 1 goto :vault_clean
-
-set "MSG="
-set /p "MSG=      请输入提交说明（直接回车使用默认）："
-if "%MSG%"=="" set "MSG=更新笔记 %date%"
+if not errorlevel 1 goto :sv_clean
 
 echo       正在提交 ...
-git commit -q -m "%MSG%"
-if errorlevel 1 goto :fail
+git commit -q -m "%V_MSG%"
+if errorlevel 1 goto :sv_fail
 
 echo       正在同步远端最新改动 ...
-git pull --rebase origin %VAULT_BRANCH%
-if errorlevel 1 goto :rebase_fail
+git pull --rebase origin %V_BRANCH%
+if errorlevel 1 goto :sv_conflict
 
 echo       正在推送 ...
-git push origin %VAULT_BRANCH%
-if errorlevel 1 goto :push_fail
+git push origin %V_BRANCH%
+if errorlevel 1 goto :sv_push_fail
 
+echo       [完成] %V_LABEL% 已推送。
 echo.
-echo       [完成] 笔记已推送到私有仓库。
 popd
-goto :site
+exit /b 0
 
-:vault_clean
-echo       没有检测到笔记改动，跳过。
-popd
-goto :site
-
-:rebase_fail
-popd
+:sv_clean
+echo       没有检测到改动，跳过。
 echo.
-echo       [失败] 与远端冲突，需要手动处理。请在本窗口执行：
-echo                  cd /d "%VAULT%"
+popd
+exit /b 0
+
+:sv_clone_fail
+echo       [失败] 克隆失败。请确认已安装 Git、已登录 GitHub，且你有该私有仓库权限。
+exit /b 1
+
+:sv_conflict
+popd
+echo       [失败] %V_LABEL% 与远端冲突，需要手动处理。请执行：
+echo                  cd /d "%V_DIR%"
 echo                  git status
-echo              解决冲突后执行：
+echo              解决冲突后：
 echo                  git rebase --continue
-echo                  git push origin %VAULT_BRANCH%
-goto :end
+echo                  git push origin %V_BRANCH%
+exit /b 3
 
-:push_fail
+:sv_push_fail
 popd
-echo.
-echo       [失败] 推送失败，请检查网络或 GitHub 凭据后重试。
-goto :end
+echo       [失败] %V_LABEL% 推送失败，请检查网络或 GitHub 凭据。
+exit /b 4
 
-:clone_fail
-echo.
-echo       [失败] 克隆失败。请确认：
-echo              1) 已安装 Git 并登录过 GitHub（首次会弹出登录窗口）
-echo              2) 你有该私有仓库的访问权限
-goto :end
+:sv_fail
+popd
+echo       [失败] %V_LABEL% 提交失败。
+exit /b 2
 
-rem ==================== 第二步：提交站点源码 ====================
+rem ==================== 第三步：提交站点源码 ====================
 :site
-echo.
-echo [2/2] 检查站点源码 ...
+echo [3/3] 检查站点源码 ...
 git add -A
 git diff --cached --quiet
 if not errorlevel 1 goto :site_clean
@@ -112,10 +136,12 @@ goto :end
 
 :site_push_fail
 echo.
-echo       [失败] 站点源码推送失败。
-echo              若这是第一次推送，请先执行一次初始化（只需一次）：
-echo                  git push --force origin main
-echo              之后本脚本即可正常推送。
+echo       [失败] 站点源码推送失败，请检查网络后重试。
+goto :end
+
+:vault_fail
+echo.
+echo       [失败] 笔记仓库同步失败，已跳过后续步骤（详见上方提示）。
 goto :end
 
 :no_git

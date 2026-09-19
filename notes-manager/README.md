@@ -8,7 +8,8 @@ Personal Access Token（PAT）调用 GitHub Contents API，把 Markdown 笔记�
 
 - 站点源码：本仓库 `godspead0/godspead0.github.io`（用户站点仓库，发布在**站点根路径**）
 - 访问地址：`https://godspead0.github.io/`
-- 数据仓库示例：`https://github.com/godspead0/godspead0_understand`（你的已有笔记仓库，私有）
+- 数据仓库示例：`https://github.com/godspead0/godspead0_understand`（技术笔记，私有）
+  与 `https://github.com/godspead0/godspead0_algorithm`（算法笔记，私有）
 
 > Vite 已配置 `base: './'`（相对路径），因此无论发布在根路径还是 `/<repo>/` 子路径下都能正常加载资源。
 
@@ -18,7 +19,8 @@ Personal Access Token（PAT）调用 GitHub Contents API，把 Markdown 笔记�
 
 | 模块 | 能力 |
 | --- | --- |
-| 连接与鉴权 | Owner / Repo / Branch / PAT 配置弹窗，一键连通性测试，凭据存 `localStorage`，支持清除 |
+| 连接与鉴权 | **多仓库（技术 / 算法）** 各自配置 Owner / Repo / Branch / 笔记目录 / PAT，逐仓连通性测试，凭据存 `localStorage`，支持清除 |
+| 多仓库聚合 | 一次同步拉取全部已配置仓库，按**仓库（一级分类）→ 分类 → 标签**聚合；侧栏可只看某个仓库 |
 | 笔记管理 | 新建 / 编辑 / 删除 / 改名（自动重命名文件）、Markdown 实时预览、分栏编辑、下载单篇 `.md` |
 | 批量导入 | 拖拽（支持整个文件夹递归收集）或选择本地 `.md` / `.markdown` / `.txt`，自动解析 frontmatter |
 | 导出备份 | 单篇下载、多选导出、全站打包 `zip`（含 `全栈/`、按年月归档目录、`checkins.json`、`categories.json`） |
@@ -27,7 +29,7 @@ Personal Access Token（PAT）调用 GitHub Contents API，把 Markdown 笔记�
 | 搜索 | Fuse.js 对 `title` / `tags` / `category` / `body` 即时模糊全文检索，中文友好 |
 | 排序 | 更新时间 / 创建时间 / 标题，升序或降序一键切换 |
 | 打卡热力图 | SVG 实现的 GitHub Contribution Graph：7 行 × N 周（12 / 26 / 53 周可切换）、5 级色阶、月份刻度、悬停浮层、点击查看某日 |
-| 打卡联动 | 「今日一键打卡」、撤销、补卡；**新建 / 修改 / 导入笔记时自动当日 +1**（异步、静默、失败不打断主流程） |
+| 打卡联动 | 「今日一键打卡」（**每天仅限一次**，已打卡后按钮置灰）、撤销、补卡；**新建 / 修改 / 导入笔记时自动当日 +1**（异步、静默、失败不打断主流程） |
 | 主题 | 浅色 / 深色手动切换（`html.dark`），首次访问跟随系统 |
 | 异常处理 | 401 / 403 限频 / 404 / 409 冲突 / 422 / 5xx / 超时 / 断网，全部归一化为中文可读提示 |
 
@@ -46,7 +48,7 @@ Personal Access Token（PAT）调用 GitHub Contents API，把 Markdown 笔记�
 | Markdown | marked 12（解析）+ DOMPurify 3（XSS 消毒，fail-closed） |
 | 导出 | `FileReader`（读取本地文件）/ `Blob`（单篇下载）/ JSZip（全站打包） |
 | 本地缓存 | `localStorage`（凭据、主题、打卡记录预热缓存） |
-| 测试 | `scripts/smoke.mjs`（Vite SSR + Node，83 项断言，无需浏览器） |
+| 测试 | `scripts/smoke.mjs`（Vite SSR + Node，102 项断言，无需浏览器） |
 
 ---
 
@@ -110,24 +112,37 @@ notes-manager/
 
 ## 4. 数据仓库结构
 
-笔记数据存放在**另一个仓库** [`godspead0_understand`](https://github.com/godspead0/godspead0_understand)（私有）的 `全栈/` 目录下，与站点源码仓库分离：
+笔记数据存放在**站点源码仓库之外的独立仓库**里，网站支持**多个仓库聚合**（vault），
+每个仓库在「连接设置」里有独立页签：
+
+| 页签 | 仓库 | 默认分支 | 笔记目录 |
+| --- | --- | --- | --- |
+| 技术 | `godspead0_understand`（私有） | `master` | `全栈/` |
+| 算法 | `godspead0_algorithm`（私有） | `main` | 仓库根目录 |
+
+网站里 **一级分类 = 仓库（技术 / 算法）**，二级才是分类文件夹。
 
 ```text
-godspead0_understand/          # 默认分支 master
-├── 全栈/                      # ★ 笔记根目录（SPA 只扫描这里）
+godspead0_understand/          # 技术笔记 · 默认分支 master
+├── 全栈/                      # ★ 笔记根目录（只扫描这里）
 │   ├── 前端部分/Vue.md        # 按分类建文件夹，文件夹名 = 笔记分类
 │   ├── 后端部分/spring框架/SpringBoot.md
 │   ├── 术语解释.md            # 散落在 全栈/ 下的单篇笔记（无分类）
-│   ├── checkins.json          # { "YYYY-MM-DD": count, ... }（自动创建）
-│   ├── categories.json        # 分类与标签元数据（自动创建）
+│   ├── checkins.json          # { "YYYY-MM-DD": count, ... }（自动创建，主仓库）
+│   ├── categories.json        # 分类与标签元数据（自动创建，主仓库）
 │   └── {id}_{slug}.md         # 在网站里新建的笔记（带 frontmatter）
-└── origin/                    # 该仓库里的其它内容（代码等），SPA 不读取
+└── origin/                    # 该仓库里的其它内容（代码等），不读取
+
+test_algorithm/                # 算法笔记 · 默认分支 main
+├── 力扣/ 洛谷/ 牛客/ ...      # ★ 笔记与题解（文件夹名 = 笔记分类）
+└── {id}_{slug}.md             # 在网站里新建的算法笔记会落在仓库根目录
 ```
 
-> 扫描范围仅限 `全栈/`（递归最多 6 层），
-> 因此仓库里的代码等其它文件不会被当成笔记。
+> 技术仓库只扫描 `全栈/`（递归最多 6 层），算法仓库扫描仓库根目录（同样递归），
+> 因此两个仓库里的代码等其它文件都不会被当成笔记。
+> **打卡记录 `checkins.json` 与 `categories.json` 存放在第一个已配置的仓库**（通常是技术仓库）。
 
-### 4.1 笔记文件 `全栈/{id}_{slug}.md`
+### 4.1 笔记文件 `{id}_{slug}.md`
 
 - `id`：13 位毫秒时间戳，天然按时间排序且几乎不会冲突
 - `slug`：标题转写，**保留中文**，仅剔除 `\/:*?"<>|` 等文件系统非法字符
@@ -160,9 +175,12 @@ updated: "2026-09-02T03:30:00.000Z"
 
 1. 在 GitHub 上创建或使用已有的笔记仓库（例如 `godspead0/godspead0_understand`），私有/公开皆可；
 2. 把 `examples/data-repo/` 下的三个示例文件上传进去（可选，不传也能用）；
-3. 分支填 `master`（`godspead0_understand` 的默认分支）。网站内新建的笔记会写入
-   <code class="font-mono">全栈/{id}_{slug}.md</code>；你自己整理的历史笔记放在
-   <code class="font-mono">全栈/</code> 的任意子文件夹里也能被读取（最多 6 层）。
+3. 在弹窗的「技术」页签填 `master`、「算法」页签填 `main`（各自仓库的默认分支）。
+   网站内新建的笔记按当前所选仓库写入：
+   技术仓库 → <code class="font-mono">全栈/{id}_{slug}.md</code>；
+   算法仓库 → <code class="font-mono">{id}_{slug}.md</code>（根目录）。
+   你自己整理的历史笔记放在各自的笔记目录下的任意子文件夹里也能被读取。
+4. Token 在 Repository access 中**同时勾选两个仓库**，权限选 `Contents: Read and write`。
 
 ---
 
@@ -175,11 +193,12 @@ npm install
 npm run dev       # 开发服务器 http://localhost:5173
 npm run build     # 产物输出到 dist/
 npm run preview   # 本地预览构建产物 http://localhost:4173
-npm run smoke     # 冒烟测试（83 项断言，无浏览器依赖）
+npm run smoke     # 冒烟测试（102 项断言，无浏览器依赖）
 npm run verify    # build + smoke
 ```
 
-首次打开会**自动弹出连接设置弹窗**，填写 Owner / Repo / Branch / Token 后点「测试并保存」。
+首次打开会**自动弹出连接设置弹窗**，在「技术 / 算法」两个页签分别填写
+Owner / Repo / Branch / 笔记目录 / Token，各自点「测试并保存」。
 
 ---
 
@@ -299,7 +318,7 @@ npx serve dist        # 或任意静态服务器；预览时同样是相对路�
 ## 9. 测试
 
 ```bash
-npm run smoke                  # 离线：83 项断言
+npm run smoke                  # 离线：102 项断言
 SMOKE_NETWORK=1 npm run smoke  # 额外向 api.github.com 发 1 次请求，验证错误映射
 ```
 
@@ -328,7 +347,8 @@ SMOKE_NETWORK=1 npm run smoke  # 额外向 api.github.com 发 1 次请求，验�
 | 触发限频 | 已认证 5000 次/小时；少点几次「同步」，或等提示的重置时间 |
 | 中文变成乱码 | 不应发生（已做 UTF-8 安全编解码）；若出现请提 issue 并附上笔记原文 |
 | 保存冲突 409 | 同一文件被别处修改；点「同步」拉取最新版本后重新编辑 |
-| 笔记数量对不上 | 只统计 `全栈/` 下的 `.md` / `.markdown`（最多 6 层子目录）；仓库里其它目录的内容不会被读取 |
+| 笔记数量对不上 | 技术仓库只统计 `全栈/` 下的 `.md` / `.markdown`，算法仓库统计根目录及子目录；两个仓库的代码等其它文件都不会被读取 |
+| 某个仓库的笔记没出现 | 该仓库页签的 Token 未填 / 填错；在「连接设置」对应页签点「测试并保存」确认可写 |
 | 单文件读取失败 | Contents API 对 >1MB 文件不返回内容，前端会自动改走 `download_url` raw 通道 |
 | 换电脑后需要重新配置 | 凭据存在浏览器本地，不同设备/浏览器互不同步（安全设计，而非缺陷） |
 
