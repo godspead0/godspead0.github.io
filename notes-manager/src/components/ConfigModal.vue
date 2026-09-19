@@ -31,9 +31,16 @@ const {
 
 const tokenUrl = 'https://github.com/settings/tokens/new?scopes=repo&description=notes-manager-vault'
 const fineGrainedUrl = 'https://github.com/settings/personal-access-tokens/new'
-const repoUrl = computed(() =>
-  form.owner && form.repo ? `https://github.com/${form.owner}/${form.repo}` : '',
-)
+/**
+ * 「打开数据仓库」外链。
+ * 只在该页签**确实配置过**（存了 Token）时给出 —— 不能用 form.owner/form.repo 判断，
+ * 因为 form 的初始值来自代码里的默认配置，会让访客看到一个他从没配过的仓库链接。
+ */
+const repoUrl = computed(() => {
+  const v = editingVault.value
+  if (!v || !v.token || !v.owner || !v.repo) return ''
+  return `https://github.com/${v.owner}/${v.repo}`
+})
 /** 该仓库的笔记目录：空串表示仓库根目录 */
 const notesDirLabel = computed(() =>
   form.notesDir ? `仓库内的 ${form.notesDir}/ 目录` : '仓库根目录（含子文件夹）',

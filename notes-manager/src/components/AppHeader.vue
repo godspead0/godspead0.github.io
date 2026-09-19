@@ -16,11 +16,21 @@ const ws = useWorkspace()
 const { notes } = ws
 const { keyword, hasActiveFilter, clearFilters, filteredCount } = useSearch(notes)
 const { isDark, toggleTheme } = useTheme()
-const { form, connected, openModal } = useConfig()
+const { vaults, connected, openModal } = useConfig()
 
 const searchInput = ref(null)
 
-const repoLabel = computed(() => (form.repo ? `${form.owner}/${form.repo}` : '未配置仓库'))
+/**
+ * 顶栏仓库标识。
+ * 只反映**真正配置过**（填了 Token + Owner + Repo）的仓库 —— 不能直接用 `form`，
+ * 因为 form 初始值来自代码里的默认配置，会让访客看到他从没配过的仓库名。
+ */
+const repoLabel = computed(() => {
+  const list = vaults.value.filter((v) => v.token && v.owner && v.repo)
+  if (!list.length) return '未配置仓库'
+  if (list.length === 1) return `${list[0].owner}/${list[0].repo}`
+  return list.map((v) => v.label).join(' + ')
+})
 
 async function onSync() {
   await ws.refresh()

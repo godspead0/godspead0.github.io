@@ -326,6 +326,15 @@ try {
     html.includes('笔记目录（留空 = 仓库根目录）') && html.includes('技术') && html.includes('算法'),
   )
   check('未配置时列表引导同步/新建', html.includes('还没有同步到任何笔记'))
+  /* 访客不应看到代码里的默认仓库名（既是泄露也是误导） */
+  check('访客顶栏不暴露默认仓库名', !html.includes('godspead0/godspead0_understand'))
+  check('访客顶栏显示「未配置仓库」', html.includes('未配置仓库'))
+
+  // 真正配置过之后，顶栏才显示仓库
+  ws.config.vaults.value[0].token = 'ghp_dummy_for_render'
+  html = await renderApp()
+  check('配置后顶栏显示真实仓库', html.includes('godspead0/godspead0_understand'))
+  ws.config.vaults.value[0].token = ''
 
   /* 3.2 注入数据：列表 / 侧栏筛选树 / 归档 / 仪表盘 */
   ws.config.showModal.value = false
