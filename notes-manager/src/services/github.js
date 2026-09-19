@@ -198,6 +198,18 @@ function buildHeaders(extra = {}, cfg = currentConfig) {
   return headers
 }
 
+/**
+ * 写操作守卫：匿名（访客）没有 Token，GitHub 必然拒绝写请求。
+ * 提前抛出可读的错误，避免访客看到生硬的 403/404。
+ */
+function requireToken(cfg) {
+  if (!cfg.token) {
+    throw new GithubError('当前是只读模式：公开仓库任何人都能看，但只有填入 Token 后才能修改。', {
+      code: 'NO_TOKEN',
+    })
+  }
+}
+
 function contentsUrl(path, cfg = currentConfig) {
   const { owner, repo } = cfg
   const clean = String(path || '').replace(/^\/+/, '').replace(/\/+$/, '')
@@ -214,11 +226,9 @@ function contentsUrl(path, cfg = currentConfig) {
  * @returns {Promise<any>} 解析后的 JSON；204 返回 null
  */
 async function request(url, options = {}, timeout = DEFAULT_TIMEOUT, cfg = currentConfig) {
-  if (!cfg.token) {
-    throw new GithubError('尚未配置 Personal Access Token，请先在「连接设置」中填写。', {
-      code: 'NO_TOKEN',
-    })
-  }
+  /* 没有 Token 时不再直接报错：公开仓库允许匿名读取，访客正是靠这条路径看笔记。
+     匿名调用的 API 限额是 60 次/小时（每 IP），因此匿名读正文时改走 raw CDN，
+     见 getFile()。写操作没有 Token 会被 GitHub 拒绝，由界面层提前拦截。 */
 
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), timeout)
@@ -305,12 +315,69 @@ export async function testConnection(vault = null) {
 /* ------------------------------------------------------------------ */
 
 /**
+ * raw CDN 地址：匿名读取公开仓库正文时使用
+ * 不计入 GitHub API 的 60 次/小时匿名限额，也不需要鉴权。
+ */
+function rawFileUrl(path, cfg = currentConfig) {
+  const { owner, repo, branch } = cfg
+  const encoded = String(path || '')
+    .replace(/^\/+/, '')
+    .split('/')
+    .map(encodeURIComponent)
+    .join('/')
+  return `https://raw.githubusercontent.com/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/${encodeURIComponent(branch)}/${encoded}`
+}
+
+/**
+ * 匿名读取公开仓库的单个文件（访客路径）
+ * @returns {Promise<{content: string, sha: string, path: string} | null>} 404 返回 null
+ */
+async function getFileViaRaw(path, cfg) {
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), DEFAULT_TIMEOUT)
+  try {
+    const res = await fetch(rawFileUrl(path, cfg), { signal: controller.signal })
+    if (res.status === 404) return null
+    if (!res.ok) {
+      const hint =
+        res.status === 403 || res.status === 429
+          ? '公开仓库读取被限流，请稍后重试。'
+          : `读取失败（HTTP ${res.status}）：仓库可能不存在、分支名写错，或该仓库并非公开仓库。`
+      throw new GithubError(hint, { status: res.status, code: 'RAW_ERROR' })
+    }
+    return {
+      content: await res.text(),
+      sha: '', // 匿名模式不写文件，sha 由文件树补齐
+      path: String(path || '').replace(/^\/+/, ''),
+    }
+  } catch (err) {
+    if (err?.name === 'AbortError') {
+      throw new GithubError('请求超时，请检查网络后重试。', { code: 'TIMEOUT', detail: err })
+    }
+    if (err instanceof GithubError) throw err
+    throw new GithubError('网络异常：无法连接 raw.githubusercontent.com，请检查网络。', {
+      code: 'NETWORK_ERROR',
+      detail: err,
+    })
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
+/**
  * 读取单个文件
  * @param {string} path 仓库内相对路径，如 'checkins.json'
  * @returns {Promise<{content: string, sha: string, path: string} | null>} 不存在时返回 null
  */
 export async function getFile(path, vault = null) {
   const cfg = resolveConfig(vault)
+
+  /* 无 Token（访客）→ 走 raw CDN。
+     若 94 篇笔记全用 Contents API，匿名限额 60 次/小时会瞬间打爆；
+     raw CDN 无此限额。sha 留空，由调用方用文件树里的 sha 兜底，
+     这样缓存仍然命中，二次刷新只花 1 次 API 调用。 */
+  if (!cfg.token) return getFileViaRaw(path, cfg)
+
   const url = `${contentsUrl(path, cfg)}?ref=${encodeURIComponent(cfg.branch)}`
   try {
     const data = await request(url, {}, DEFAULT_TIMEOUT, cfg)
@@ -351,6 +418,7 @@ export async function getFile(path, vault = null) {
  */
 export async function saveFile(path, content, sha, message, vault = null) {
   const cfg = resolveConfig(vault)
+  requireToken(cfg)
   const body = {
     message: message || `${sha ? 'update' : 'create'}: ${path}`,
     content: utf8ToBase64(content),
@@ -374,6 +442,7 @@ export async function saveFile(path, content, sha, message, vault = null) {
  */
 export async function deleteFile(path, sha, message, vault = null) {
   const cfg = resolveConfig(vault)
+  requireToken(cfg)
   const body = {
     message: message || `delete: ${path}`,
     sha,

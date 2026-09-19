@@ -16,19 +16,22 @@ const ws = useWorkspace()
 const { notes } = ws
 const { keyword, hasActiveFilter, clearFilters, filteredCount } = useSearch(notes)
 const { isDark, toggleTheme } = useTheme()
-const { vaults, connected, openModal } = useConfig()
+const { vaults, connected, openModal, readOnly } = useConfig()
 
 const searchInput = ref(null)
 
 /**
  * 顶栏仓库标识。
- * 只反映**真正配置过**（填了 Token + Owner + Repo）的仓库 —— 不能直接用 `form`，
+ * 只反映**真正配置过**（填了 Owner + Repo）的仓库 —— 不能直接用 `form`，
  * 因为 form 初始值来自代码里的默认配置，会让访客看到他从没配过的仓库名。
+ * 注意：公开仓库的名称显示出来是正常的（本来就是给所有人看的）。
  */
 const repoLabel = computed(() => {
-  const list = vaults.value.filter((v) => v.token && v.owner && v.repo)
+  const list = vaults.value.filter((v) => v.owner && v.repo)
   if (!list.length) return '未配置仓库'
-  if (list.length === 1) return `${list[0].owner}/${list[0].repo}`
+  // 多个页签指向同一个仓库（技术/算法共用公开展示仓库）→ 显示仓库名更有信息量
+  const repos = [...new Set(list.map((v) => `${v.owner}/${v.repo}`))]
+  if (repos.length === 1) return repos[0]
   return list.map((v) => v.label).join(' + ')
 })
 
@@ -73,7 +76,14 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
           <AppIcon name="book" :size="16" />
         </span>
         <div class="hidden leading-tight sm:block">
-          <div class="text-sm font-semibold">笔记收纳与打卡</div>
+          <div class="flex items-center gap-1.5 text-sm font-semibold">
+            笔记收纳与打卡
+            <span
+              v-if="readOnly"
+              class="rounded border border-[var(--app-border)] px-1 text-[10px] font-normal muted"
+              title="公开只读模式：任何访客都能查看笔记；填入 Token 后才可修改"
+            >只读</span>
+          </div>
           <button class="flex items-center gap-1 text-[11px] muted hover:underline" @click="openModal">
             <AppIcon :name="connected ? 'cloud' : 'cloud-off'" :size="11" />
             {{ repoLabel }}
@@ -116,12 +126,12 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
           <span class="hidden sm:inline">{{ ws.syncing.value ? '同步中' : '同步' }}</span>
         </button>
 
-        <button class="btn btn-sm btn-primary" title="新建笔记" @click="ws.openCreate()">
+        <button class="btn btn-sm btn-primary" :disabled="readOnly" :title="readOnly ? '只读模式：填入 Token 后才能新建' : '新建笔记'" @click="ws.openCreate()">
           <AppIcon name="plus" :size="14" />
           <span class="hidden sm:inline">新建</span>
         </button>
 
-        <button class="btn btn-sm" title="导入本地 Markdown" @click="onPickFiles">
+        <button class="btn btn-sm" :disabled="readOnly" :title="readOnly ? '只读模式：填入 Token 后才能导入' : '导入本地 Markdown'" @click="onPickFiles">
           <AppIcon name="upload" :size="14" />
           <span class="hidden md:inline">导入</span>
         </button>
@@ -134,8 +144,8 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
         <button
           class="btn btn-sm"
           :class="ws.checkins.checkedToday.value ? 'border-[#1f883d] text-[#1f883d]' : ''"
-          :disabled="ws.checkins.checkedToday.value"
-          :title="ws.checkins.checkedToday.value ? '今日已打卡（每天仅限一次）' : '今日一键打卡'"
+          :disabled="ws.checkins.checkedToday.value || readOnly"
+          :title="readOnly ? '只读模式：填入 Token 后才能打卡' : ws.checkins.checkedToday.value ? '今日已打卡（每天仅限一次）' : '今日一键打卡'"
           @click="ws.checkins.checkIn(1)"
         >
           <AppIcon name="flame" :size="14" />

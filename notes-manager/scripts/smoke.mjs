@@ -315,40 +315,66 @@ try {
     return renderToString(app)
   }
 
-  /* 3.1 未配置状态：自动弹出连接设置 */
+  /* 3.1 访客默认状态：站点默认指向公开展示仓库，打开即能看到内容 */
   let html = await renderApp()
   check('根组件渲染出顶栏标题', html.includes('笔记收纳与打卡'))
   check('渲染出搜索框', html.includes('搜索标题'))
   check('渲染出打卡热力图组件', html.includes('打卡热力图'))
-  check('未配置时渲染连接设置弹窗', html.includes('连接 GitHub 数据仓库'))
+
+  /* 公开展示仓库是**刻意公开**的，所以名字写在代码里没问题 ——
+     访客没有任何配置，只能靠这份默认值匿名读取。
+     这里不写死具体名字，而是拿模块自己的默认值来断言，避免测试与实现脱节。 */
+  const pubOwner = ws.config.vaults.value[0].owner
+  const pubRepo = ws.config.vaults.value[0].repo
+  check('默认已指向公开展示仓库（访客无需任何配置）', Boolean(pubOwner && pubRepo) && ws.config.configured.value)
+  check(
+    '两个页签共用同一公开仓库的不同子目录',
+    ws.config.vaults.value.every((v) => v.owner === pubOwner && v.repo === pubRepo && v.notesDir),
+  )
+  check('访客顶栏显示公开展示仓库', html.includes(`${pubOwner}/${pubRepo}`))
+  check('访客顶栏带「只读」标记', html.includes('只读'))
+  check('访客无需配置 → 不自动弹出连接设置', !html.includes('连接 GitHub 数据仓库'))
+  check('访客默认不含 Token（匿名只读）', ws.config.vaults.value.every((v) => !v.token))
+  check('访客处于只读模式', ws.config.readOnly.value === true && ws.config.writable.value === false)
+  check('只读模式下仍保留同步入口', html.includes('同步'))
+  check('未配置时列表引导同步/新建', html.includes('还没有同步到任何笔记'))
+
+  /* 只读模式必须在服务层就拦住写操作，而不是等 GitHub 回 403 */
+  const ghMod = await load('/src/services/github.js')
+  let roErr = null
+  try {
+    await ghMod.saveFile('全栈/不该被写进去.md', 'x', '', 'test', ws.config.vaults.value[0])
+  } catch (e) {
+    roErr = e
+  }
+  check('只读模式下写文件被拒绝', roErr && roErr.code === 'NO_TOKEN')
+  let roDel = null
+  try {
+    await ghMod.deleteFile('全栈/不该被删掉.md', 'deadbeef', 'test', ws.config.vaults.value[0])
+  } catch (e) {
+    roDel = e
+  }
+  check('只读模式下删文件被拒绝', roDel && roDel.code === 'NO_TOKEN')
+
+  /* 配置弹窗默认不弹出；手动打开后仍应有技术/算法两个页签 */
+  ws.config.openModal()
+  html = await renderApp()
+  check('打开设置后渲染连接弹窗', html.includes('连接 GitHub 数据仓库'))
   check(
     '配置弹窗渲染技术/算法两个仓库页签',
     html.includes('笔记目录（留空 = 仓库根目录）') && html.includes('技术') && html.includes('算法'),
   )
-  check('未配置时列表引导同步/新建', html.includes('还没有同步到任何笔记'))
-  check('访客顶栏显示「未配置仓库」', html.includes('未配置仓库'))
+  ws.config.showModal.value = false
 
-  /* 隐私核心断言：站点公开，代码里不得预填任何仓库标识。
-     这里刻意**不写死任何具体仓库名**（写了等于又把它泄露到源码里），
-     而是断言"默认值为空"+"表单无预填值" —— 将来任何新默认值都会被抓住。 */
-  check(
-    '默认仓库配置为空（不预填 Owner/Repo/Branch/笔记目录）',
-    ws.config.vaults.value.every((v) => !v.owner && !v.repo && !v.branch && !v.notesDir),
-  )
-  check(
-    '访客看到的配置表单不含任何预填值',
-    !/<input[^>]*id="cfg-(owner|repo|branch|notesdir)"[^>]*value="[^"]+"/.test(html),
-  )
-  check('访客看到的配置表单占位提示均为通用文案', !/placeholder="[^"]*godspead0/.test(html))
-
-  // 真正配置过之后，顶栏才显示仓库
-  const v0 = ws.config.vaults.value[0]
-  Object.assign(v0, { token: 'ghp_dummy_for_render', owner: 'octocat', repo: 'my-notes' })
+  /* 清空仓库 → 顶栏回到「未配置仓库」 */
+  const savedVaults = ws.config.vaults.value.map((v) => ({ ...v }))
+  ws.config.vaults.value.forEach((v) => {
+    v.owner = ''
+    v.repo = ''
+  })
   html = await renderApp()
-  check('配置后顶栏显示真实仓库', html.includes('octocat/my-notes'))
-  Object.assign(v0, { token: '', owner: '', repo: '' })
-  html = await renderApp()
-  check('清空配置后顶栏回到「未配置仓库」', html.includes('未配置仓库') && !html.includes('octocat'))
+  check('清空仓库后顶栏回到「未配置仓库」', html.includes('未配置仓库'))
+  savedVaults.forEach((v, i) => Object.assign(ws.config.vaults.value[i], v))
 
   /* 后续断言需要一个「已连接」的仓库。
      用虚构的 owner/repo —— 真实仓库名不该出现在这个公开仓库的源码里。 */

@@ -62,7 +62,7 @@ const cachedAt = ref('')
 function vaultSignature() {
   const { vaults } = useConfig()
   return vaults.value
-    .filter((v) => v.token && v.owner && v.repo)
+    .filter((v) => v.owner && v.repo)
     .map((v) => `${v.id}:${v.owner}/${v.repo}@${v.branch}/${v.notesDir || ''}`)
     .join('|')
 }
@@ -157,12 +157,16 @@ async function loadAll(opts = {}) {
 
   try {
     const { vaults } = useConfig()
-    const enabled = vaults.value.filter((v) => v.token && v.owner && v.repo)
+    /* 有 Owner/Repo 就参与读取 —— Token 可选：
+       有 Token 走 Contents API（限额 5000/小时，可写）；
+       没有 Token 走 raw CDN 匿名读（公开仓库，访客路径）。 */
+    const enabled = vaults.value.filter((v) => v.owner && v.repo)
     if (!enabled.length) {
-      throw new GithubError('尚未配置任何数据仓库，请先在「连接设置」中填写 Token。')
+      throw new GithubError('尚未配置任何数据仓库，请先在「连接设置」中填写 Owner 与 Repo。')
     }
 
     const merged = []
+    const seen = new Map() // key: `${notesDir}|${仓库内相对路径}` → 已收录的笔记
     for (const vault of enabled) {
       // 只扫描该仓库的笔记目录（算法仓库在根目录，notesDir 为空串）
       const files = await listFiles(vault.notesDir || '', 0, vault)
@@ -177,11 +181,13 @@ async function loadAll(opts = {}) {
           }
           const remote = await getFile(file.path, vault)
           if (!remote) return null
-          const note = parseNoteFile({ ...file, sha: remote.sha }, remote.content)
+          // 匿名读没有 sha，用文件树里的 sha 兜底，保证缓存能命中
+          const sha = remote.sha || file.sha
+          const note = parseNoteFile({ ...file, sha }, remote.content)
           note.vault = vault.id
           note.vaultLabel = vault.label
           note.vaultNotesDir = vault.notesDir || ''
-          fileCache.set(file.path, { sha: remote.sha, note })
+          fileCache.set(file.path, { sha, note })
           progress.value = { ...progress.value, done: progress.value.done + 1 }
           return note
         } catch (err) {
@@ -191,7 +197,17 @@ async function loadAll(opts = {}) {
           return null
         }
       })
-      merged.push(...parsed.filter(Boolean))
+
+      /* 跨仓库去重：同一篇笔记可能同时存在于「公开展示仓库」和你的私有工作区，
+         按「笔记目录 + 仓库内路径」归并，先到者胜（vaults 顺序即优先级）。 */
+      const kept = []
+      for (const note of parsed.filter(Boolean)) {
+        const key = `${note.vaultNotesDir}|${note.path}`
+        if (seen.has(key)) continue
+        seen.set(key, note)
+        kept.push(note)
+      }
+      merged.push(...kept)
     }
 
     notes.value = merged

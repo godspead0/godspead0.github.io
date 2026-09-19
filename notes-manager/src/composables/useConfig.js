@@ -16,37 +16,29 @@ import { computed, reactive, ref } from 'vue'
 import { DEFAULT_CONFIG, GithubError, setConfig, testConnection } from '../services/github.js'
 import { toast } from './useToast.js'
 
-const STORAGE_KEY = 'notes-manager.vaults.v2'
+const STORAGE_KEY = 'notes-manager.vaults.v3'
 const LEGACY_KEY = 'notes-manager.config.v1'
 
 /**
- * 默认两个仓库页签。
+ * 站点默认指向的**公开展示仓库**。
  * ---------------------------------------------------------------
- * 刻意**不预填** Owner / Repo / Branch / 笔记目录：
- * 站点是公开的，代码里的默认值会被任何访客在配置弹窗里看到，
- * 等于把私有仓库名与目录结构暴露给所有人。这些值只需每台设备首次配置时填一次，
- * 之后保存在 localStorage 中，不需要每次输入。
+ * 这是个刻意公开的仓库：里面只有笔记的 Markdown 副本，
+ * 你的私有工作区（含 .cpp / origin/ 等）不在这里。
+ *
+ * 因为仓库是公开的，所以名字写在代码里没有问题，反而必须写 ——
+ * 访客打开网站时没有任何配置，只能靠这份默认值去匿名读取并展示内容。
+ *
+ * Token 一律留空：访客不带凭据匿名读（走 raw CDN）；
+ * 你自己在浏览器里补填 Token 后就切换成可写模式。
  */
+const PUBLIC_OWNER = 'godspead0'
+const PUBLIC_REPO = 'godspead0_notes'
+const PUBLIC_BRANCH = 'main'
+
 function defaultVaults() {
   return [
-    {
-      id: 'tech',
-      label: '技术',
-      owner: '',
-      repo: '',
-      branch: '',
-      token: '',
-      notesDir: '',
-    },
-    {
-      id: 'algo',
-      label: '算法',
-      owner: '',
-      repo: '',
-      branch: '',
-      token: '',
-      notesDir: '',
-    },
+    { id: 'tech', label: '技术', owner: PUBLIC_OWNER, repo: PUBLIC_REPO, branch: PUBLIC_BRANCH, token: '', notesDir: '全栈' },
+    { id: 'algo', label: '算法', owner: PUBLIC_OWNER, repo: PUBLIC_REPO, branch: PUBLIC_BRANCH, token: '', notesDir: '算法' },
   ]
 }
 
@@ -96,11 +88,22 @@ const form = reactive({ ...(vaults.value[editingVaultIdx.value] || vaults.value[
 
 const editingVault = computed(() => vaults.value[editingVaultIdx.value] || vaults.value[0])
 const activeVault = computed(() => vaults.value[activeVaultIdx.value] || vaults.value[0])
-/** 打卡 / 分类元数据所在的主仓库 = 第一个已配置的仓库 */
+/**
+ * 打卡 / 分类元数据所在的主仓库 = 第一个**可写**（填了 Token）的仓库。
+ * 访客没有 Token，因此回退到第一个已配置仓库；此时只读，界面会禁用写操作。
+ */
 const primaryVault = computed(
-  () => vaults.value.find((v) => v.token && v.owner && v.repo) || vaults.value[0],
+  () =>
+    vaults.value.find((v) => v.token && v.owner && v.repo) ||
+    vaults.value.find((v) => v.owner && v.repo) ||
+    vaults.value[0],
 )
-const configured = computed(() => vaults.value.some((v) => v.token && v.owner && v.repo))
+/** 有 Owner/Repo 即可读取（公开仓库允许匿名读），Token 不再是必需项 */
+const configured = computed(() => vaults.value.some((v) => v.owner && v.repo))
+/** 是否可写：至少有一个仓库填了 Token */
+const writable = computed(() => vaults.value.some((v) => v.token && v.owner && v.repo))
+/** 只读模式（访客）：能看，不能改 */
+const readOnly = computed(() => configured.value && !writable.value)
 
 function persist() {
   try {
@@ -240,6 +243,8 @@ export function useConfig() {
     repoInfo,
     showModal,
     configured,
+    writable,
+    readOnly,
     // 动作
     saveAndTest,
     saveOnly,

@@ -20,12 +20,22 @@ set "ALGO_REMOTE=https://github.com/godspead0/godspead0_algorithm.git"
 set "ALGO_BRANCH=main"
 set "ALGO_LABEL=算法笔记"
 
+rem ==================== 公开展示仓库（网站对所有人展示的就是它）====================
+rem 这个仓库是 public 的，只放 .md 笔记副本；私有工作区里的 .cpp / origin/ 等不会进来。
+set "PUBLIC_DIR=D:\vscode_test_all\notes_public"
+set "PUBLIC_REMOTE=https://github.com/godspead0/godspead0_notes.git"
+set "PUBLIC_BRANCH=main"
+rem 公开仓库内的子目录名（技术笔记从 全栈/ 复制过去，算法笔记从根目录复制到 算法/）
+set "PUBLIC_TECH_SUB=全栈"
+set "PUBLIC_ALGO_SUB=算法"
+
 echo ============================================================
-echo               笔记提交助手（技术 + 算法）
+echo               笔记提交助手（技术 + 算法 + 公开镜像）
 echo ============================================================
 echo   站点目录：%ROOT%
 echo   技术笔记：%TECH_DIR%   (分支 %TECH_BRANCH%)
 echo   算法笔记：%ALGO_DIR%   (分支 %ALGO_BRANCH%)
+echo   公开展示：%PUBLIC_DIR%   (分支 %PUBLIC_BRANCH%)
 echo ============================================================
 echo.
 
@@ -37,11 +47,21 @@ set /p "MSG=请输入本次提交说明（直接回车使用默认）："
 if "%MSG%"=="" set "MSG=更新笔记 %date%"
 echo.
 
-call :sync_vault "%TECH_DIR%" "%TECH_REMOTE%" "%TECH_BRANCH%" "%TECH_LABEL%" "%MSG%" "1/3"
+call :sync_vault "%TECH_DIR%" "%TECH_REMOTE%" "%TECH_BRANCH%" "%TECH_LABEL%" "%MSG%" "1/4"
 if errorlevel 1 goto :vault_fail
 
-call :sync_vault "%ALGO_DIR%" "%ALGO_REMOTE%" "%ALGO_BRANCH%" "%ALGO_LABEL%" "%MSG%" "2/3"
+call :sync_vault "%ALGO_DIR%" "%ALGO_REMOTE%" "%ALGO_BRANCH%" "%ALGO_LABEL%" "%MSG%" "2/4"
 if errorlevel 1 goto :vault_fail
+
+rem ==================== 第三步：镜像到公开展示仓库 ====================
+echo [3/4] 同步公开展示仓库 ...
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0镜像到公开仓库.ps1" ^
+  -TechNotesDir "%TECH_DIR%\%PUBLIC_TECH_SUB%" -TechDestSub "%PUBLIC_TECH_SUB%" ^
+  -AlgoNotesDir "%ALGO_DIR%" -AlgoDestSub "%PUBLIC_ALGO_SUB%" ^
+  -PublicDir "%PUBLIC_DIR%" -PublicRemote "%PUBLIC_REMOTE%" ^
+  -Branch "%PUBLIC_BRANCH%" -Message "%MSG%"
+if errorlevel 1 goto :public_fail
+echo.
 
 goto :site
 
@@ -114,9 +134,9 @@ popd
 echo       [失败] %V_LABEL% 提交失败。
 exit /b 2
 
-rem ==================== 第三步：提交站点源码 ====================
+rem ==================== 第四步：提交站点源码 ====================
 :site
-echo [3/3] 检查站点源码 ...
+echo [4/4] 检查站点源码 ...
 git add -A
 git diff --cached --quiet
 if not errorlevel 1 goto :site_clean
@@ -126,7 +146,13 @@ if errorlevel 1 goto :fail
 
 echo       正在推送站点源码 ...
 git push -u origin main
+if not errorlevel 1 goto :site_ok
+rem 直连 github.com:443 有时会被拦，回退走本机代理
+echo       直连失败，尝试通过本机代理 127.0.0.1:7892 推送 ...
+git -c http.proxy=http://127.0.0.1:7892 push -u origin main
 if errorlevel 1 goto :site_push_fail
+
+:site_ok
 echo       [完成] 站点源码已推送，1-2 分钟后网站自动更新。
 goto :end
 
@@ -142,6 +168,12 @@ goto :end
 :vault_fail
 echo.
 echo       [失败] 笔记仓库同步失败，已跳过后续步骤（详见上方提示）。
+goto :end
+
+:public_fail
+echo.
+echo       [失败] 公开展示仓库同步失败 —— 私有仓库已推送成功，
+echo              但网站展示的还是旧内容。修好网络后重跑一次即可。
 goto :end
 
 :no_git
