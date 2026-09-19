@@ -23,7 +23,7 @@ set "ALGO_LABEL=算法笔记"
 rem ==================== 公开展示仓库（网站对所有人展示的就是它）====================
 rem 这个仓库是 public 的，只放 .md 笔记副本；私有工作区里的 .cpp / origin/ 等不会进来。
 set "PUBLIC_DIR=D:\vscode_test_all\notes_public"
-set "PUBLIC_REMOTE=https://github.com/godspead0/godspead0_notes.git"
+set "PUBLIC_REMOTE=https://github.com/godspead0/godspead0_notes1.git"
 set "PUBLIC_BRANCH=main"
 rem 公开仓库内的子目录名（技术笔记从 全栈/ 复制过去，算法笔记从根目录复制到 算法/）
 set "PUBLIC_TECH_SUB=全栈"

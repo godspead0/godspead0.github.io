@@ -40,7 +40,8 @@ function Sync-MdTree {
 
   $files = @(
     Get-ChildItem -LiteralPath $Src -Recurse -File -Filter *.md |
-      Where-Object { $_.FullName -notmatch '\\\.git\\' }
+      # 排除 .git / .obsidian / .claude 等工具目录，这些不该出现在公开仓库里
+      Where-Object { $_.FullName -notmatch '\\\.[^\\]+\\' }
   )
 
   if (-not (Test-Path -LiteralPath $Dst)) {
@@ -84,17 +85,59 @@ if ([string]::IsNullOrWhiteSpace($PublicDir) -or [string]::IsNullOrWhiteSpace($P
   throw '缺少 -PublicDir / -PublicRemote 参数'
 }
 
+# ---------- 网络说明 ----------
+# github.com:443 在部分网络环境下会被拦，而且拦截是间歇性的。
+# 所有 git 网络操作都走这里：先直连重试，再回退本机代理（如果代理开着）。
+$ProxyUrl = 'http://127.0.0.1:7892'
+
+function Test-ProxyUp {
+  try {
+    $c = New-Object System.Net.Sockets.TcpClient
+    $c.Connect('127.0.0.1', 7892)
+    $ok = $c.Connected
+    $c.Close()
+    return $ok
+  } catch { return $false }
+}
+
+function Invoke-GitNet {
+  param([string[]]$GitArgs, [int]$Retries = 3)
+
+  for ($i = 1; $i -le $Retries; $i++) {
+    git @GitArgs
+    if ($LASTEXITCODE -eq 0) { return $true }
+    if ($i -lt $Retries) { Say "第 $i 次失败，6 秒后重试 ..."; Start-Sleep -Seconds 6 }
+  }
+
+  if (Test-ProxyUp) {
+    Say "直连不通，改走本机代理 $ProxyUrl ..."
+    git -c "http.proxy=$ProxyUrl" @GitArgs
+    if ($LASTEXITCODE -eq 0) { return $true }
+  }
+  return $false
+}
+
 # ---------- 1. 首次克隆 ----------
 if (-not (Test-Path -LiteralPath (Join-Path $PublicDir '.git'))) {
   Say '未找到公开展示仓库，正在克隆 ...'
-  git clone $PublicRemote $PublicDir
-  if ($LASTEXITCODE -ne 0) { throw '克隆公开展示仓库失败（检查网络与 GitHub 凭据）' }
+  if (-not (Invoke-GitNet -GitArgs @('clone', $PublicRemote, $PublicDir))) {
+    throw '克隆公开展示仓库失败（检查网络与 GitHub 凭据）'
+  }
 }
 
 # ---------- 2. 镜像 Markdown ----------
 $nTech = Sync-MdTree -Src $TechNotesDir -Dst (Join-Path $PublicDir $TechDestSub)
 $nAlgo = Sync-MdTree -Src $AlgoNotesDir -Dst (Join-Path $PublicDir $AlgoDestSub)
 Say "镜像完成：技术 $nTech 篇、算法 $nAlgo 篇。"
+
+# 无条件写入仓库级匿名身份。
+# 注意：不能判断「user.email 是否为空」—— git config 读的是**生效值**（含全局配置），
+# 新克隆的仓库会继承全局的真实邮箱，一旦判断非空就跳过，真实邮箱就被提交进公开仓库了。
+Push-Location -LiteralPath $PublicDir
+try {
+  git config user.email '174760772+godspead0@users.noreply.github.com'
+  git config user.name 'zhongrongwei'
+} finally { Pop-Location }
 
 # ---------- 3. 提交并推送 ----------
 Push-Location -LiteralPath $PublicDir
@@ -113,13 +156,13 @@ try {
     git commit -q -m $Message
     if ($LASTEXITCODE -ne 0) { throw '提交公开展示仓库失败' }
 
-    git pull --rebase origin $Branch
-    if ($LASTEXITCODE -ne 0) {
-      throw "公开展示仓库与远端有冲突，请到 $PublicDir 执行 git status 手动处理"
+    if (-not (Invoke-GitNet -GitArgs @('pull', '--rebase', 'origin', $Branch))) {
+      throw "公开展示仓库与远端冲突或网络不通，请到 $PublicDir 执行 git status 手动处理"
     }
 
-    git push origin $Branch
-    if ($LASTEXITCODE -ne 0) { throw '推送公开展示仓库失败（检查网络）' }
+    if (-not (Invoke-GitNet -GitArgs @('push', 'origin', $Branch))) {
+      throw '推送公开展示仓库失败（检查网络）'
+    }
 
     Say '[完成] 公开展示仓库已推送。'
   }

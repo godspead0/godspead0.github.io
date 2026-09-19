@@ -32,7 +32,7 @@ const LEGACY_KEY = 'notes-manager.config.v1'
  * 你自己在浏览器里补填 Token 后就切换成可写模式。
  */
 const PUBLIC_OWNER = 'godspead0'
-const PUBLIC_REPO = 'godspead0_notes'
+const PUBLIC_REPO = 'godspead0_notes1'
 const PUBLIC_BRANCH = 'main'
 
 function defaultVaults() {
