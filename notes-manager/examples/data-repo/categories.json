@@ -1,0 +1,17 @@
+{
+  "_comment": "分类与标签的展示元数据（颜色等）。真实归属关系以每篇笔记 frontmatter 中的 category / tags 为准；此文件缺失或损坏不影响筛选功能，UI 会依据笔记自动推导。",
+  "categories": [
+    { "name": "前端部分", "color": "#3b82f6" },
+    { "name": "后端部分", "color": "#8b5cf6" },
+    { "name": "中间件部分", "color": "#f59e0b" },
+    { "name": "其他", "color": "#10b981" }
+  ],
+  "tags": [
+    { "name": "vue", "color": "#42b883" },
+    { "name": "typescript", "color": "#3178c6" },
+    { "name": "redis", "color": "#dc382d" },
+    { "name": "docker", "color": "#2496ed" },
+    { "name": "面试", "color": "#8b5cf6" }
+  ],
+  "updated": "2026-09-19T00:00:00.000Z"
+}

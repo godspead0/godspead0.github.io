@@ -1,0 +1,185 @@
+<script setup>
+/**
+ * 连接设置弹窗（Owner / Repo / Branch / PAT）
+ * 凭据只保存在本机 localStorage，绝不经过任何第三方服务器。
+ */
+import { computed, ref, watch } from 'vue'
+import { useConfig } from '../composables/useConfig.js'
+import AppIcon from './AppIcon.vue'
+
+const { form, testing, connected, lastError, repoInfo, saveAndTest, saveOnly, resetConfig, showModal } = useConfig()
+
+const showToken = ref(false)
+
+const tokenUrl = computed(
+  () => 'https://github.com/settings/tokens/new?scopes=repo&description=notes-manager-vault',
+)
+const fineGrainedUrl = 'https://github.com/settings/personal-access-tokens/new'
+const repoUrl = computed(() =>
+  form.owner && form.repo ? `https://github.com/${form.owner}/${form.repo}` : '',
+)
+
+function close() {
+  showModal.value = false
+}
+
+async function onTest() {
+  await saveAndTest()
+}
+
+function onReset() {
+  resetConfig()
+  showToken.value = false
+}
+
+function onKey(e) {
+  if (e.key === 'Escape') close()
+}
+
+watch(showModal, (open) => {
+  if (open) window.addEventListener('keydown', onKey)
+  else window.removeEventListener('keydown', onKey)
+})
+</script>
+
+<template>
+  <Transition name="fade">
+    <div
+      v-if="showModal"
+      class="fixed inset-0 z-[70] flex items-start justify-center overflow-y-auto bg-black/45 p-4 py-10"
+      @click.self="close"
+    >
+      <div class="card w-full max-w-2xl p-5 shadow-2xl">
+        <!-- 头部 -->
+        <div class="mb-4 flex items-start justify-between gap-3">
+          <div>
+            <h2 class="flex items-center gap-2 text-lg font-semibold">
+              <AppIcon name="github" :size="18" />
+              连接 GitHub 数据仓库
+            </h2>
+            <p class="mt-1 text-xs muted">
+              纯前端直连 GitHub REST API，无自建后端。数据只写入你自己的仓库。
+            </p>
+          </div>
+          <button class="btn btn-sm" title="关闭" @click="close"><AppIcon name="x" :size="14" /></button>
+        </div>
+
+        <!-- 安全提示 -->
+        <div class="mb-4 rounded-lg border border-[#0969da]/35 bg-[#ddf4ff]/70 p-3 text-xs leading-6 dark:bg-[#0c2d6b]/40">
+          <p class="flex items-start gap-2">
+            <AppIcon name="shield" :size="14" class="mt-1" />
+            <span>
+              Token 仅保存在本浏览器的 <code class="font-mono">localStorage</code>，不会上传到任何服务器；
+              但仍建议：<b>仅在私人设备上使用</b>，并创建<b>仅授权目标仓库 Contents: Read and write</b> 的
+              fine-grained Token。若在公共电脑使用，用完请点击「清除凭据」。
+            </span>
+          </p>
+        </div>
+
+        <!-- 表单 -->
+        <div class="grid gap-3 sm:grid-cols-2">
+          <div>
+            <label class="label" for="cfg-owner">Owner（用户名 / 组织名）</label>
+            <input id="cfg-owner" v-model="form.owner" class="input" placeholder="godspead0" autocomplete="username" />
+          </div>
+          <div>
+            <label class="label" for="cfg-repo">数据仓库 Repo</label>
+            <input id="cfg-repo" v-model="form.repo" class="input" placeholder="godspead0_understand" />
+          </div>
+          <div>
+            <label class="label" for="cfg-branch">分支 Branch</label>
+            <input id="cfg-branch" v-model="form.branch" class="input" placeholder="master" />
+          </div>
+          <div>
+            <label class="label" for="cfg-token">Personal Access Token</label>
+            <div class="relative">
+              <input
+                id="cfg-token"
+                v-model="form.token"
+                class="input pr-16 font-mono"
+                :type="showToken ? 'text' : 'password'"
+                placeholder="ghp_xxx 或 github_pat_xxx"
+                autocomplete="off"
+                spellcheck="false"
+              />
+              <button
+                class="absolute right-1.5 top-1/2 -translate-y-1/2 rounded px-2 py-1 text-xs muted hover:bg-black/5 dark:hover:bg-white/10"
+                type="button"
+                @click="showToken = !showToken"
+              >
+                {{ showToken ? '隐藏' : '显示' }}
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- 帮助链接 -->
+        <div class="mt-3 flex flex-wrap gap-3 text-xs">
+          <a class="link" :href="tokenUrl" target="_blank" rel="noopener noreferrer">
+            <AppIcon name="key" :size="12" /> 生成经典 Token（勾选 repo）
+          </a>
+          <a class="link" :href="fineGrainedUrl" target="_blank" rel="noopener noreferrer">
+            <AppIcon name="shield" :size="12" /> 生成 Fine-grained Token（推荐）
+          </a>
+          <a v-if="repoUrl" class="link" :href="repoUrl" target="_blank" rel="noopener noreferrer">
+            <AppIcon name="external-link" :size="12" /> 打开数据仓库
+          </a>
+        </div>
+
+        <!-- 结果回显 -->
+        <div
+          v-if="lastError"
+          class="mt-4 flex items-start gap-2 rounded-lg border border-[#cf222e]/40 bg-[#ffebe9]/70 p-3 text-xs leading-6 text-[#a40e26] dark:bg-[#4a1113]/50 dark:text-[#ffcecb]"
+        >
+          <AppIcon name="alert" :size="14" class="mt-1" />
+          <span>{{ lastError }}</span>
+        </div>
+
+        <div
+          v-else-if="connected && repoInfo"
+          class="mt-4 rounded-lg border border-[#1a7f37]/40 bg-[#dafbe1]/70 p-3 text-xs leading-6 text-[#0f5323] dark:bg-[#0f2f1d]/60 dark:text-[#aff5b4]"
+        >
+          <p class="flex items-center gap-2 font-semibold">
+            <AppIcon name="check-circle" :size="14" /> 连接正常
+          </p>
+          <p class="mt-1">
+            仓库：{{ repoInfo.repo }}（{{ repoInfo.private ? '私有' : '公开' }}） · 分支：{{ repoInfo.branch }} ·
+            写入权限：{{ repoInfo.canWrite ? '可写 ✅' : '只读 ❌（Token 缺少 Contents 写权限）' }}
+            <span v-if="repoInfo.user"> · 身份：{{ repoInfo.user }}</span>
+          </p>
+        </div>
+
+        <!-- 操作区 -->
+        <div class="mt-5 flex flex-wrap items-center justify-between gap-2">
+          <button class="btn btn-sm" @click="onReset">
+            <AppIcon name="log-out" :size="13" /> 清除凭据
+          </button>
+          <div class="flex flex-wrap gap-2">
+            <button class="btn" :disabled="testing" @click="saveOnly">仅保存</button>
+            <button class="btn btn-primary" :disabled="testing" @click="onTest">
+              <AppIcon :name="testing ? 'loader' : 'zap'" :size="14" />
+              {{ testing ? '正在测试…' : '测试并保存' }}
+            </button>
+          </div>
+        </div>
+
+        <p class="mt-3 text-[11px] muted">
+          默认读取仓库内的 <code class="font-mono">全栈/</code> 目录（递归，最多 6 层），
+          按分类文件夹自动归类。
+        </p>
+      </div>
+    </div>
+  </Transition>
+</template>
+
+<style scoped>
+.link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--app-accent);
+}
+.link:hover {
+  text-decoration: underline;
+}
+</style>

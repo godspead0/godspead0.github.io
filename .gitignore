@@ -1,0 +1,24 @@
+# ============ 依赖与构建产物（可随时重新生成）============
+node_modules/
+/dist/
+.vite/
+npm-debug.log*
+
+# ============ 旧 VitePress 站点遗留（已被 notes-manager 取代，仅保留在本地）============
+/.vitepress/
+/index.md
+/教程.md
+/package.json
+/package-lock.json
+/assets/
+/godspead0.github.io/
+
+# ============ 笔记数据 ============
+# 笔记存放在独立私有仓库 godspead0_understand 的 全栈/ 目录下，
+# 这里放的是该仓库的本地克隆，由「提交笔记.bat」负责提交推送；
+# 本站点仓库是公开的，因此不纳入版本控制。
+/godspead0_understand/
+
+# ============ 系统文件 ============
+.DS_Store
+Thumbs.db
