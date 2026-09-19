@@ -2,8 +2,10 @@
  * 连接配置 Composable（多数据仓库）
  * ---------------------------------------------------------------
  * 每个 vault 对应一个 GitHub 数据仓库（Owner / Repo / Branch / Token / notesDir）：
- *   - 技术：godspead0_understand（全栈/）
- *   - 算法：godspead0_algorithm（仓库根目录）
+ *   - 技术：一个私有仓库的 全栈/ 子目录
+ *   - 算法：另一个私有仓库的根目录
+ *
+ * 仓库名等具体值刻意不写进代码（见 defaultVaults 注释）。
  *
  * - vaults    ：全部仓库配置（localStorage 持久化，自动从旧单仓库配置迁移）
  * - form      ：连接设置弹窗里正在编辑的那个仓库
@@ -17,23 +19,31 @@ import { toast } from './useToast.js'
 const STORAGE_KEY = 'notes-manager.vaults.v2'
 const LEGACY_KEY = 'notes-manager.config.v1'
 
+/**
+ * 默认两个仓库页签。
+ * ---------------------------------------------------------------
+ * 刻意**不预填** Owner / Repo / Branch / 笔记目录：
+ * 站点是公开的，代码里的默认值会被任何访客在配置弹窗里看到，
+ * 等于把私有仓库名与目录结构暴露给所有人。这些值只需每台设备首次配置时填一次，
+ * 之后保存在 localStorage 中，不需要每次输入。
+ */
 function defaultVaults() {
   return [
     {
       id: 'tech',
       label: '技术',
-      owner: 'godspead0',
-      repo: 'godspead0_understand',
-      branch: 'master',
+      owner: '',
+      repo: '',
+      branch: '',
       token: '',
-      notesDir: '全栈',
+      notesDir: '',
     },
     {
       id: 'algo',
       label: '算法',
-      owner: 'godspead0',
-      repo: 'godspead0_algorithm',
-      branch: 'main',
+      owner: '',
+      repo: '',
+      branch: '',
       token: '',
       notesDir: '',
     },

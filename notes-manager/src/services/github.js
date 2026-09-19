@@ -108,10 +108,15 @@ export function base64ToUtf8(base64) {
 /* 配置管理                                                             */
 /* ------------------------------------------------------------------ */
 
+/**
+ * 旧版扁平配置的默认值。
+ * owner / repo / branch **刻意留空**：站点是公开的，写在这里的默认值会被任何访客
+ * 在配置弹窗里看到，等于公开私有仓库名。真实值只存在浏览器 localStorage 中。
+ */
 export const DEFAULT_CONFIG = {
-  owner: 'godspead0',
-  repo: 'godspead0_understand',
-  branch: 'master',
+  owner: '',
+  repo: '',
+  branch: '',
   token: '',
   tokenPrefix: 'ghp-', // 仅用于 UI 提示，不参与请求
 }

@@ -147,25 +147,15 @@ watch(showModal, (open) => {
         <div class="grid gap-3 sm:grid-cols-2">
           <div>
             <label class="label" for="cfg-owner">Owner（用户名 / 组织名）</label>
-            <input id="cfg-owner" v-model="form.owner" class="input" placeholder="godspead0" autocomplete="username" />
+            <input id="cfg-owner" v-model="form.owner" class="input" placeholder="你的 GitHub 用户名" autocomplete="username" />
           </div>
           <div>
             <label class="label" for="cfg-repo">数据仓库 Repo</label>
-            <input
-              id="cfg-repo"
-              v-model="form.repo"
-              class="input"
-              :placeholder="editingVault?.label === '算法' ? 'godspead0_algorithm' : 'godspead0_understand'"
-            />
+            <input id="cfg-repo" v-model="form.repo" class="input" placeholder="存放笔记的仓库名" />
           </div>
           <div>
             <label class="label" for="cfg-branch">分支 Branch</label>
-            <input
-              id="cfg-branch"
-              v-model="form.branch"
-              class="input"
-              :placeholder="editingVault?.label === '算法' ? 'main' : 'master'"
-            />
+            <input id="cfg-branch" v-model="form.branch" class="input" placeholder="如 main 或 master" />
           </div>
           <div>
             <label class="label" for="cfg-notesdir">笔记目录（留空 = 仓库根目录）</label>
@@ -173,7 +163,7 @@ watch(showModal, (open) => {
               id="cfg-notesdir"
               v-model="form.notesDir"
               class="input font-mono"
-              placeholder="全栈"
+              placeholder="扫描的子目录名，留空则扫整个仓库"
             />
           </div>
           <div class="sm:col-span-2">
@@ -241,8 +231,12 @@ watch(showModal, (open) => {
         </div>
 
         <p class="mt-3 text-[11px] muted">
-          「{{ editingVault?.label }}」默认读取 {{ notesDirLabel }} 下的全部 <code class="font-mono">.md</code>，
+          「{{ editingVault?.label }}」将读取 {{ notesDirLabel }} 下的全部 <code class="font-mono">.md</code>，
           按一级子文件夹自动归类；打卡记录与分类配色存放在<b>第一个已配置的仓库</b>。
+        </p>
+        <p v-if="!form.notesDir" class="mt-1 text-[11px] text-[var(--app-warn,#9a6700)]">
+          笔记不在仓库根部时，请填写具体子目录名 —— 留空会扫描整个仓库，
+          容易把仓库里的说明文档也识别成笔记。
         </p>
       </div>
     </div>

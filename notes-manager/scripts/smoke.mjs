@@ -326,15 +326,44 @@ try {
     html.includes('笔记目录（留空 = 仓库根目录）') && html.includes('技术') && html.includes('算法'),
   )
   check('未配置时列表引导同步/新建', html.includes('还没有同步到任何笔记'))
-  /* 访客不应看到代码里的默认仓库名（既是泄露也是误导） */
-  check('访客顶栏不暴露默认仓库名', !html.includes('godspead0/godspead0_understand'))
   check('访客顶栏显示「未配置仓库」', html.includes('未配置仓库'))
+  /* 隐私核心断言：代码里不得残留任何私有仓库标识（站点是公开的） */
+  check('访客看不到 Owner 默认值', !html.includes('godspead0'))
+  check(
+    '访客看不到任何私有仓库名',
+    !html.includes('godspead0_understand') && !html.includes('godspead0_algorithm'),
+  )
+  check('访客看不到笔记目录默认值', !html.includes('全栈'))
+  check('访客看不到默认分支名', !/value="(master|main)"/.test(html))
 
   // 真正配置过之后，顶栏才显示仓库
-  ws.config.vaults.value[0].token = 'ghp_dummy_for_render'
+  const v0 = ws.config.vaults.value[0]
+  Object.assign(v0, { token: 'ghp_dummy_for_render', owner: 'octocat', repo: 'my-notes' })
   html = await renderApp()
-  check('配置后顶栏显示真实仓库', html.includes('godspead0/godspead0_understand'))
-  ws.config.vaults.value[0].token = ''
+  check('配置后顶栏显示真实仓库', html.includes('octocat/my-notes'))
+  Object.assign(v0, { token: '', owner: '', repo: '' })
+  html = await renderApp()
+  check('清空配置后顶栏回到「未配置仓库」', html.includes('未配置仓库') && !html.includes('octocat'))
+
+  /* 后续断言需要一个「已连接」的仓库。
+     用虚构的 owner/repo —— 真实仓库名不该出现在这个公开仓库的源码里。 */
+  const [techVault, algoVault] = ws.config.vaults.value
+  Object.assign(techVault, {
+    owner: 'octocat',
+    repo: 'my-tech-notes',
+    branch: 'main',
+    token: 'ghp_dummy_for_render',
+    notesDir: 'notes',
+  })
+  Object.assign(algoVault, {
+    owner: 'octocat',
+    repo: 'my-algo-notes',
+    branch: 'main',
+    token: 'ghp_dummy_for_render',
+    notesDir: '',
+  })
+  html = await renderApp()
+  check('配置两个仓库后顶栏显示两个仓库标签', html.includes('技术 + 算法'))
 
   /* 3.2 注入数据：列表 / 侧栏筛选树 / 归档 / 仪表盘 */
   ws.config.showModal.value = false
@@ -408,7 +437,7 @@ try {
     '新建笔记弹窗渲染完整表单',
     html.includes('新建笔记') && html.includes('标签（Enter / 逗号 添加）') && html.includes('创建并同步'),
   )
-  check('新建笔记可选保存到的仓库', html.includes('保存到仓库') && html.includes('godspead0_algorithm'))
+  check('新建笔记可选保存到的仓库', html.includes('保存到仓库') && html.includes('my-algo-notes'))
   ws.closeEditor()
 
   ws.openEdit(ws.notes.value[1])
