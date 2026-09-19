@@ -124,21 +124,52 @@ function Sync-Vault {
 
   Push-Location -LiteralPath $Dir
   try {
-    [void](Invoke-Git @('add', '-A'))
-    if ((Invoke-Git @('diff', '--cached', '--quiet')) -eq 0) {
-      Say '没有检测到改动，跳过。'
-      Write-Host ''
-      return $true
-    }
-
-    Say '正在提交 ...'
-    if ((Invoke-Git @('commit', '-q', '-m', $Msg)) -ne 0) {
-      Fail '提交失败（可能是 Git 身份未配置）。'
+    # 护栏：上次跑到一半卡在冲突里了。这时再 git add -A 会把冲突标记
+    # （<<<<<<< ======= >>>>>>>）当成正文一起提交进去，必须先让人处理完。
+    if ((Test-Path (Join-Path $Dir '.git\rebase-merge')) -or (Test-Path (Join-Path $Dir '.git\rebase-apply'))) {
+      Fail "$Label 上次的 rebase 还没结束（处于冲突处理中），本次已中止。请先执行："
+      Say "cd /d `"$Dir`""
+      Say 'git status                    # 看哪些文件冲突'
+      Say 'git rebase --continue         # 改好冲突并 git add 之后继续'
+      Say 'git rebase --abort            # 或者放弃本次提交、回到动手之前'
       return $false
     }
 
-    Say '正在同步远端最新改动 ...'
-    if ((Invoke-Git @('pull', '--rebase', 'origin', $Branch)) -ne 0) {
+    [void](Invoke-Git @('add', '-A'))
+    # 注意：这里**不能**「没有新改动就直接 return」。
+    # 上一次可能提交成功了但推送失败（比如网络断），那个提交还躺在本地；
+    # 一 return 就永远不会被推上去，用户会以为已经同步了。
+    # 所以没改动只是不 commit，后面照常 fetch / rebase / push。
+    if ((Invoke-Git @('diff', '--cached', '--quiet')) -ne 0) {
+      Say '正在提交 ...'
+      if ((Invoke-Git @('commit', '-q', '-m', $Msg)) -ne 0) {
+        Fail '提交失败（可能是 Git 身份未配置）。'
+        return $false
+      }
+    } else {
+      Say '没有检测到新改动。'
+    }
+
+    # 先单独 fetch，把「网络不通」和「真的冲突」区分开 ——
+    # 以前直接 git pull --rebase，任何失败都被报成「与远端冲突」，
+    # 明明是 SSL/连接被重置（例如 remote 还是 HTTPS 而 github.com:443 被拦），
+    # 却让人去解决根本不存在的冲突。两者的处理方式完全不同。
+    Say '正在拉取远端最新改动 ...'
+    $fetched = $false
+    for ($i = 1; $i -le 3; $i++) {
+      if ((Invoke-Git @('fetch', 'origin', $Branch)) -eq 0) { $fetched = $true; break }
+      if ($i -lt 3) { Say "第 $i 次拉取失败，6 秒后重试 ..."; Start-Sleep -Seconds 6 }
+    }
+    if (-not $fetched) {
+      Fail "$Label 连不上远端（网络问题，不是冲突）。请检查网络后重跑本脚本。"
+      Say "排查：cd /d `"$Dir`""
+      Say "      git remote get-url origin    # 应为 git@github.com:... 而不是 https://"
+      Say '      ssh -T git@github.com        # 应显示 Hi godspead0!'
+      return $false
+    }
+
+    # 到这里网络是通的，rebase 再失败就确实是内容冲突了
+    if ((Invoke-Git @('rebase', "origin/$Branch")) -ne 0) {
       Fail "$Label 与远端冲突，需要手动处理。请执行："
       Say "cd /d `"$Dir`""
       Say 'git status                    # 看看哪些文件冲突'
