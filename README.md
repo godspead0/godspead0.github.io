@@ -52,7 +52,7 @@ tech_doc/                              ← 站点仓库（公开）
 │  ├─ src/services/                    # GitHub 只读客户端 / 笔记模型 / Markdown / 导出
 │  ├─ src/composables/                 # 状态管理（笔记、打卡、分类、搜索、数据源）
 │  ├─ src/components/                  # 界面组件（含 SVG 打卡热力图）
-│  └─ scripts/smoke.mjs                # 离线冒烟测试（153 项断言，无需浏览器）
+│  └─ scripts/smoke.mjs                # 离线冒烟测试（157 项断言，无需浏览器）
 ├─ 提交笔记.bat                         # 写完笔记后双击即可提交推送（4 个步骤）
 ├─ 镜像到公开仓库.ps1                    # 第 3 步调用：把 .md 单向镜像到公开展示仓库
 ├─ 我的仓库配置（本机私有）.md            # 已 gitignore，真实仓库名只在这里
@@ -109,7 +109,7 @@ cd notes-manager
 npm install
 npm run dev        # 开发服务器
 npm run build      # 构建到 dist/
-npm run smoke      # 离线冒烟测试（153 项断言）
+npm run smoke      # 离线冒烟测试（157 项断言）
 npm run verify     # 构建 + 冒烟测试
 ```
 

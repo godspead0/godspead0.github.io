@@ -9,7 +9,7 @@
  * 「提交笔记.bat」完成，网页端不发起任何写请求。
  */
 import { computed, ref } from 'vue'
-import { GithubError, getFile, listFiles } from '../services/github.js'
+import { GithubError, clearTreeCache, getFile, listFiles } from '../services/github.js'
 import { countWords, parseNoteFile } from '../services/notes.js'
 import { toast } from './useToast.js'
 import { useConfig } from './useConfig.js'
@@ -131,13 +131,21 @@ async function mapLimit(items, limit, worker) {
 /**
  * 全量拉取笔记（多仓库）
  * 逐个读取已配置的 vault（技术 / 算法），合并后统一展示。
- * @param {{silent?: boolean}} [opts]
+ * @param {{silent?: boolean, fresh?: boolean}} [opts]
+ *   silent = true  不弹成功提示（后台加载）
+ *   fresh  = true  **用户主动点「同步」** —— 绕过两层缓存，保证看到刚推上去的内容：
+ *                    1. 文件树缓存（60s TTL）—— 不清的话新笔记连列都列不出来
+ *                    2. raw CDN 缓存（max-age=300）—— 不清的话正文还是 5 分钟前的旧内容
+ *                  首屏自动加载**不要**传，否则每次打开都重新下载全部正文。
  */
 async function loadAll(opts = {}) {
   if (loading.value) return
   loading.value = true
   loadError.value = ''
   progress.value = { done: 0, total: 0, label: '正在读取仓库配置…' }
+
+  const fresh = Boolean(opts.fresh)
+  if (fresh) clearTreeCache()
 
   try {
     const { vaults } = useConfig()
@@ -163,7 +171,7 @@ async function loadAll(opts = {}) {
             progress.value = { ...progress.value, done: progress.value.done + 1 }
             return cached.note
           }
-          const remote = await getFile(file.path, vault)
+          const remote = await getFile(file.path, vault, fresh ? { bust: Date.now() } : {})
           if (!remote) return null
           // 匿名读没有 sha，用文件树里的 sha 兜底，保证缓存能命中
           const sha = remote.sha || file.sha

@@ -56,7 +56,7 @@
 | Markdown | marked 12（解析）+ DOMPurify 3（XSS 消毒，fail-closed） |
 | 导出 | `FileReader`（读取本地文件）/ `Blob`（单篇下载）/ JSZip（全站打包） |
 | 本地缓存 | `localStorage`（凭据、主题、打卡记录预热缓存） |
-| 测试 | `scripts/smoke.mjs`（Vite SSR + Node，153 项断言，无需浏览器） |
+| 测试 | `scripts/smoke.mjs`（Vite SSR + Node，157 项断言，无需浏览器） |
 
 ---
 
@@ -220,7 +220,7 @@ npm install
 npm run dev       # 开发服务器 http://localhost:5173
 npm run build     # 产物输出到 dist/
 npm run preview   # 本地预览构建产物 http://localhost:4173
-npm run smoke     # 冒烟测试（153 项断言，无浏览器依赖）
+npm run smoke     # 冒烟测试（157 项断言，无浏览器依赖）
 npm run verify    # build + smoke
 ```
 
@@ -295,6 +295,23 @@ GitHub 未认证 60 次/小时、认证 5000 次/小时。前端做了三层收�
 2. 批量下载笔记正文时并发度 5（`mapLimit`）；
 3. **sha 级缓存**：目录列表里 `sha` 未变化的文件直接复用内存中的笔记，不重复下载；
 4. 响应头 `x-ratelimit-remaining: 0` 或 403 + `rate limit` 时，提示具体重置时间。
+
+**两层缓存，以及「同步」为什么能立刻看到新笔记**
+
+| 层 | 位置 | 有效期 | 作用 |
+| --- | --- | --- | --- |
+| 文件树缓存 | 内存（`treeCache`） | 60s | 技术 / 算法指向同一仓库时，整棵树只请求一次 |
+| raw CDN | 浏览器 + CDN | `max-age=300` | 首屏不必重新下载 94 篇正文 |
+
+这两层都会让**刚推上去的笔记延迟出现**，所以：
+
+- **首屏自动加载**走缓存（`refresh({ silent: false })`，不带 `fresh`）—— 快
+- **用户点「同步」**传 `fresh: true` → 先 `clearTreeCache()` 再给每个 raw URL 附 `?v=<时间戳>`，
+  两层一起绕过，保证立刻看到最新内容
+
+⚠️ 这里有个容易踩的坑：**不能**用 `silent` 兼职表达「用户主动」。
+`silent` 的语义是「要不要弹提示」，而首屏挂载时也是 `silent: false`，
+直接复用会导致**每次打开页面都重新下载全部正文**，白丢浏览器缓存。所以用独立的 `fresh` 选项。
 
 ### 7.4 分类推断：笔记目录必须由调用方传入
 
@@ -400,8 +417,8 @@ npx serve dist        # 或任意静态服务器；预览时同样是相对路�
 ## 9. 测试
 
 ```bash
-npm run smoke                  # 离线：153 项断言
-SMOKE_NETWORK=1 npm run smoke  # 联网：159 项断言，会以匿名身份读一次真实数据源
+npm run smoke                  # 离线：157 项断言
+SMOKE_NETWORK=1 npm run smoke  # 联网：163 项断言，会以匿名身份读一次真实数据源
 ```
 
 `scripts/smoke.mjs` 用 Vite 的 `ssrLoadModule` 在 Node 中加载真实源码，覆盖：

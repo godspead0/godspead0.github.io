@@ -132,7 +132,7 @@ const SORTS = [
           class="btn btn-sm"
           :disabled="syncing.value"
           title="重新拉取远端数据"
-          @click="ws.refresh()"
+          @click="ws.refresh({ fresh: true })"
         >
           <AppIcon :name="syncing.value ? 'loader' : 'refresh'" :size="12" /> 刷新
         </button>
@@ -168,7 +168,7 @@ const SORTS = [
           <p class="font-semibold">数据同步失败</p>
           <p>{{ loadError.value }}</p>
         </div>
-        <button class="btn btn-sm" @click="ws.refresh()">重试</button>
+        <button class="btn btn-sm" @click="ws.refresh({ fresh: true })">重试</button>
       </div>
 
       <!-- 骨架屏 -->
@@ -195,7 +195,7 @@ const SORTS = [
           <button class="btn btn-sm" @click="ws.config.openSource()">
             <AppIcon name="sliders" :size="13" /> 数据来源
           </button>
-          <button class="btn btn-sm btn-primary" @click="ws.refresh()">
+          <button class="btn btn-sm btn-primary" @click="ws.refresh({ fresh: true })">
             <AppIcon name="refresh" :size="13" /> 立即同步
           </button>
         </div>

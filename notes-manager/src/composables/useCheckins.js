@@ -112,14 +112,14 @@ const longestStreak = computed(() => {
 
 /**
  * 拉取远端 checkins.json
- * @param {{silent?: boolean}} [opts]
+ * @param {{silent?: boolean, fresh?: boolean}} [opts] fresh = 用户主动同步，绕过 raw CDN 缓存
  */
 async function load(opts = {}) {
   loading.value = true
   lastError.value = ''
   try {
     const vault = useConfig().primaryVault.value
-    const remote = await getFile(CHECKINS_PATH, vault)
+    const remote = await getFile(CHECKINS_PATH, vault, opts.fresh ? { bust: Date.now() } : {})
     if (remote) {
       const parsed = JSON.parse(remote.content || '{}')
       data.value = parsed && typeof parsed === 'object' ? parsed : {}

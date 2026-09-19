@@ -249,26 +249,31 @@ async function request(url, options = {}, timeout = DEFAULT_TIMEOUT, cfg = DEFAU
 /**
  * raw CDN 地址：匿名读取公开仓库正文时使用
  * 不计入 GitHub API 的 60 次/小时匿名限额，也不需要鉴权。
+ * @param {string|number} [bust] 传入时附加 `?v=` 打破 CDN 缓存。
+ *   raw.githubusercontent.com 带 `Cache-Control: max-age=300`，
+ *   刚推完笔记点「同步」会拿到 5 分钟前的旧正文 —— 手动同步时用这个绕开。
+ *   首次/自动加载**不要**传，否则每次都重新下载全部正文，白丢浏览器缓存。
  */
-function rawFileUrl(path, cfg = DEFAULT_CONFIG) {
+function rawFileUrl(path, cfg = DEFAULT_CONFIG, bust = null) {
   const { owner, repo, branch } = cfg
   const encoded = String(path || '')
     .replace(/^\/+/, '')
     .split('/')
     .map(encodeURIComponent)
     .join('/')
-  return `https://raw.githubusercontent.com/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/${encodeURIComponent(branch)}/${encoded}`
+  const base = `https://raw.githubusercontent.com/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/${encodeURIComponent(branch)}/${encoded}`
+  return bust ? `${base}?v=${encodeURIComponent(bust)}` : base
 }
 
 /**
  * 匿名读取公开仓库的单个文件（访客路径）
  * @returns {Promise<{content: string, sha: string, path: string} | null>} 404 返回 null
  */
-async function getFileViaRaw(path, cfg) {
+async function getFileViaRaw(path, cfg, bust = null) {
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), DEFAULT_TIMEOUT)
   try {
-    const res = await fetch(rawFileUrl(path, cfg), { signal: controller.signal })
+    const res = await fetch(rawFileUrl(path, cfg, bust), { signal: controller.signal })
     if (res.status === 404) return null
     if (!res.ok) {
       const hint =
@@ -299,16 +304,18 @@ async function getFileViaRaw(path, cfg) {
 /**
  * 读取单个文件
  * @param {string} path 仓库内相对路径，如 'checkins.json'
+ * @param {object} [vault] 仓库配置
+ * @param {{bust?: string|number}} [opts] bust = 打破 raw CDN 缓存（手动同步时用）
  * @returns {Promise<{content: string, sha: string, path: string} | null>} 不存在时返回 null
  */
-export async function getFile(path, vault = null) {
+export async function getFile(path, vault = null, opts = {}) {
   const cfg = resolveConfig(vault)
 
   /* 无 Token（访客）→ 走 raw CDN。
      若 94 篇笔记全用 Contents API，匿名限额 60 次/小时会瞬间打爆；
      raw CDN 无此限额。sha 留空，由调用方用文件树里的 sha 兜底，
      这样缓存仍然命中，二次刷新只花 1 次 API 调用。 */
-  if (!cfg.token) return getFileViaRaw(path, cfg)
+  if (!cfg.token) return getFileViaRaw(path, cfg, opts.bust ?? null)
 
   const url = `${contentsUrl(path, cfg)}?ref=${encodeURIComponent(cfg.branch)}`
   try {
@@ -438,6 +445,15 @@ const TREE_TTL = 60 * 1000
 /** 写/删文件后立刻失效该仓库的文件树缓存，否则新笔记要等 1 分钟才出现 */
 function invalidateTree(cfg) {
   treeCache.delete(`${cfg.owner}/${cfg.repo}@${cfg.branch}`)
+}
+
+/**
+ * 清空全部文件树缓存。
+ * 手动点「同步」时调用：文件树缓存有 60 秒 TTL，
+ * 不清的话刚推上去的新笔记连「列」都列不出来（它会继续用旧的树）。
+ */
+export function clearTreeCache() {
+  treeCache.clear()
 }
 
 async function listFilesViaTree(dir = '', vault = null) {

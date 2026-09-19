@@ -37,14 +37,20 @@ const syncing = computed(() => notesApi.loading.value || checkins.loading.value)
 
 /**
  * 三路并行拉取；单路失败不影响其它两路。
- * @param {{silent?: boolean}} [opts]
+ * @param {{silent?: boolean, fresh?: boolean}} [opts]
+ *   fresh = true 表示用户主动同步，绕过文件树与 raw CDN 两层缓存（见 useNotes.loadAll）
  */
 async function refresh(opts = {}) {
   if (!useConfig().configured.value) {
     toast.warn('尚未配置数据仓库，请检查 src/composables/useConfig.js 中的 PUBLIC_* 常量')
     return
   }
-  await Promise.allSettled([notesApi.loadAll(opts), checkins.load({ silent: true }), categories.load({ silent: true })])
+  await Promise.allSettled([
+    notesApi.loadAll(opts),
+    // 打卡与分类也跟随 fresh：用户主动同步时一并绕过 CDN 缓存
+    checkins.load({ silent: true, fresh: opts.fresh }),
+    categories.load({ silent: true, fresh: opts.fresh }),
+  ])
 }
 
 /* ------------------------------ 导出 ------------------------------ */

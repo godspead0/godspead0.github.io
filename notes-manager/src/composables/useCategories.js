@@ -62,12 +62,15 @@ function normalizeIncoming(raw) {
   }
 }
 
-/** 拉取元数据；文件不存在时静默留空（UI 会自动推导） */
+/**
+ * 拉取元数据；文件不存在时静默留空（UI 会自动推导）
+ * @param {{silent?: boolean, fresh?: boolean}} [opts] fresh = 用户主动同步，绕过 raw CDN 缓存
+ */
 async function load(opts = {}) {
   loading.value = true
   try {
     const vault = useConfig().primaryVault.value
-    const remote = await getFile(CATEGORIES_PATH, vault)
+    const remote = await getFile(CATEGORIES_PATH, vault, opts.fresh ? { bust: Date.now() } : {})
     if (remote) {
       meta.value = normalizeIncoming(JSON.parse(remote.content || '{}'))
       sha.value = remote.sha

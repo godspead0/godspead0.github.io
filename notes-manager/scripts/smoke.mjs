@@ -471,6 +471,19 @@ try {
     )
     check('匿名读正文没有触碰 api.github.com', !bodyUrl.includes('api.github.com'))
 
+    /* 手动点「同步」必须绕过两层缓存，否则刚用 bat 推上去的笔记要等最多 5 分钟才出现：
+       ① 文件树缓存 60s —— 不清的话新笔记连列都列不出来（压根不会去 getFile）
+       ② raw CDN `Cache-Control: max-age=300` —— 不清的话正文还是 5 分钟前的 */
+    check('首屏加载不打破 CDN 缓存（否则每次打开都重下全部正文）', !bodyUrl.includes('?v='), bodyUrl.slice(-40))
+    await ghMod.getFile('notes/a.md', cacheVault, { bust: 12345 })
+    check('手动同步打破 raw CDN 缓存（附 ?v=）', bodyUrl.includes('?v=12345'), bodyUrl.slice(-40))
+
+    check('clearTreeCache 已导出', typeof ghMod.clearTreeCache === 'function')
+    const beforeClear = treeCalls
+    ghMod.clearTreeCache()
+    await ghMod.listFiles('', 0, cacheVault)
+    check('清掉文件树缓存后会重新请求（新笔记才列得出来）', treeCalls === beforeClear + 1, `${beforeClear} → ${treeCalls}`)
+
     /* 仓库不存在 / 不是公开的：Trees 请求 404。以前这个错被吞掉并回退到 listDir，
        而 listDir 又把 404 当成「目录不存在」返回 []，于是**整站静默显示 0 篇笔记**，
        用户完全看不出是仓库名写错了或仓库被改成私有了。 */

@@ -34,7 +34,8 @@ const repoLabel = computed(() => {
 })
 
 async function onSync() {
-  await ws.refresh()
+  // fresh: 用户主动同步 —— 绕过文件树与 raw CDN 缓存，确保看到刚推上去的笔记
+  await ws.refresh({ fresh: true })
 }
 
 function onKeydown(e) {
