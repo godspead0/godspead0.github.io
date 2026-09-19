@@ -3,6 +3,7 @@
 纯前端 SPA（Vue 3 + Vite），浏览器直连 GitHub REST API，**没有后端服务器**。
 
 - 🌐 线上地址：<https://godspead0.github.io/>
+- 📖 **操作手册**：[`操作手册.md`](操作手册.md) —— 首次配置 / 日常写笔记与提交 / 打卡 / 排错对照表
 - 📦 站点源码：本仓库 `godspead0.github.io`（公开）
 - 🔒 技术笔记：[`godspead0_understand`](https://github.com/godspead0/godspead0_understand)（私有）→ `全栈/` 目录
 - 🧮 算法笔记：[`godspead0_algorithm`](https://github.com/godspead0/godspead0_algorithm)（私有）→ 仓库根目录
@@ -25,6 +26,7 @@ tech_doc/                              ← 站点仓库（公开）
 │                                      #   └─ 全栈/      ← ★ 技术笔记
 │                                      # D:\vscode_test_all\test_algorithm\
 │                                      #   └─ 力扣/ 洛谷/ ... ← ★ 算法笔记
+├─ 操作手册.md                          # ★ 完整使用流程（首次配置 / 日常 / 排错）
 └─ .gitignore                          # 排除笔记仓库、构建产物、系统文件
 ```
 
