@@ -35,6 +35,30 @@ $ErrorActionPreference = 'Stop'
 
 function Say([string]$msg) { Write-Host "      $msg" }
 
+# 运行原生命令，只以**退出码**判断成败。
+#
+# 为什么需要它：本脚本是 $ErrorActionPreference='Stop'，而 git 习惯把进度/叙述写到
+# stderr（"Cloning into ..."、"From <url>"、"To <url>"）。平常这些只是打在控制台上，
+# 但一旦调用方的 stderr 被重定向（例如把 bat 输出写进日志文件），PowerShell 会把
+# 这些 stderr 行变成**终止性错误**，于是镜像明明成功了却被报成失败。
+# 所以在原生命令这一小段里把偏好临时调回 Continue，成败一律看退出码。
+function Invoke-Native {
+  param([string]$Exe, [string[]]$ExeArgs)
+  $prev = $ErrorActionPreference
+  $ErrorActionPreference = 'Continue'
+  try {
+    # 必须丢弃 stdout：PowerShell 会把原生命令的输出和下面的 $LASTEXITCODE 一起
+    # 当作函数返回值，函数就返回了数组（例如 @('Successfully rebased...', 0)），
+    # 调用方写 `-eq 0` 永远为假 —— 于是明明成功却报失败。
+    # git 的进度信息（"Cloning into" / "From" / "To"）走的是 stderr，不受影响。
+    & $Exe @ExeArgs | Out-Null
+    $code = $LASTEXITCODE
+    return $code
+  } finally {
+    $ErrorActionPreference = $prev
+  }
+}
+
 function Sync-MdTree {
   param([string]$Src, [string]$Dst)
 
@@ -114,15 +138,13 @@ function Invoke-GitNet {
   param([string[]]$GitArgs, [int]$Retries = 3)
 
   for ($i = 1; $i -le $Retries; $i++) {
-    git @GitArgs
-    if ($LASTEXITCODE -eq 0) { return $true }
+    if ((Invoke-Native 'git' $GitArgs) -eq 0) { return $true }
     if ($i -lt $Retries) { Say "第 $i 次失败，6 秒后重试 ..."; Start-Sleep -Seconds 6 }
   }
 
   if (Test-ProxyUp) {
     Say "直连不通，改走本机代理 $ProxyUrl ..."
-    git -c "http.proxy=$ProxyUrl" @GitArgs
-    if ($LASTEXITCODE -eq 0) { return $true }
+    if ((Invoke-Native 'git' (@('-c', "http.proxy=$ProxyUrl") + $GitArgs)) -eq 0) { return $true }
   }
   return $false
 }
@@ -146,17 +168,16 @@ Say "镜像完成：技术 $nTech 篇、算法 $nAlgo 篇。"
 # 新克隆的仓库会继承全局的真实邮箱，一旦判断非空就跳过，真实邮箱就被提交进公开仓库了。
 Push-Location -LiteralPath $PublicDir
 try {
-  git config user.email '174760772+godspead0@users.noreply.github.com'
-  git config user.name 'zhongrongwei'
+  [void](Invoke-Native 'git' @('config', 'user.email', '174760772+godspead0@users.noreply.github.com'))
+  [void](Invoke-Native 'git' @('config', 'user.name', 'zhongrongwei'))
 } finally { Pop-Location }
 
 # ---------- 3. 提交并推送 ----------
 Push-Location -LiteralPath $PublicDir
 $failed = $null
 try {
-  git add -A
-  git diff --cached --quiet
-  $hasChange = ($LASTEXITCODE -ne 0)
+  [void](Invoke-Native 'git' @('add', '-A'))
+  $hasChange = ((Invoke-Native 'git' @('diff', '--cached', '--quiet')) -ne 0)
 
   if (-not $hasChange) {
     Say '公开展示仓库无改动。'
@@ -164,8 +185,9 @@ try {
     if ([string]::IsNullOrWhiteSpace($Message)) {
       $Message = 'mirror: 同步公开笔记 ' + (Get-Date -Format 'yyyy-MM-dd HH:mm')
     }
-    git commit -q -m $Message
-    if ($LASTEXITCODE -ne 0) { throw '提交公开展示仓库失败' }
+    if ((Invoke-Native 'git' @('commit', '-q', '-m', $Message)) -ne 0) {
+      throw '提交公开展示仓库失败'
+    }
 
     if (-not (Invoke-GitNet -GitArgs @('pull', '--rebase', 'origin', $Branch))) {
       throw "公开展示仓库与远端冲突或网络不通，请到 $PublicDir 执行 git status 手动处理"
