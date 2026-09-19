@@ -15,7 +15,7 @@ tech_doc/                              ← 站点仓库（公开）
 │  ├─ src/services/                    # GitHub API / 笔记模型 / Markdown / 导出
 │  ├─ src/composables/                 # 状态管理（笔记、打卡、分类、搜索、配置）
 │  ├─ src/components/                  # 界面组件（含 SVG 打卡热力图）
-│  └─ scripts/smoke.mjs                # 离线冒烟测试（60 项断言）
+│  └─ scripts/smoke.mjs                # 离线冒烟测试（58 项断言）
 ├─ godspead0_understand/               # 私有笔记仓库的本地克隆（已被 .gitignore 排除）
 │  └─ 全栈/                            # ★ 你的笔记都在这里
 │     ├─ 前端部分/  后端部分/  中间件部分/  架构部分/  …
