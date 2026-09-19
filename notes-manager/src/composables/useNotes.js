@@ -22,7 +22,6 @@ import {
   createNote,
   genId,
   isManagedPath,
-  NOTES_DIR,
   parseNoteFile,
   serializeNote,
 } from '../services/notes.js'
