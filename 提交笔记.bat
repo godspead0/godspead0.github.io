@@ -6,7 +6,8 @@ title 提交笔记
 cd /d "%~dp0"
 
 set "ROOT=%~dp0"
-set "VAULT=%ROOT%godspead0_understand"
+rem 笔记仓库使用你原有的克隆（与站点目录同级，不在站点仓库内部）
+set "VAULT=D:\vscode_test_all\godspead0_understand"
 set "VAULT_REMOTE=https://github.com/godspead0/godspead0_understand.git"
 set "VAULT_BRANCH=master"
 

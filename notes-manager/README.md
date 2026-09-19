@@ -1,4 +1,4 @@
-﻿# 笔记收纳与打卡系统（notes-manager）
+# 笔记收纳与打卡系统（notes-manager）
 
 部署在 **GitHub Pages**（`https://godspead0.github.io`）的**个人在线笔记收纳与打卡系统**。
 
@@ -46,7 +46,7 @@ Personal Access Token（PAT）调用 GitHub Contents API，把 Markdown 笔记�
 | Markdown | marked 12（解析）+ DOMPurify 3（XSS 消毒，fail-closed） |
 | 导出 | `FileReader`（读取本地文件）/ `Blob`（单篇下载）/ JSZip（全站打包） |
 | 本地缓存 | `localStorage`（凭据、主题、打卡记录预热缓存） |
-| 测试 | `scripts/smoke.mjs`（Vite SSR + Node，58 项断言，无需浏览器） |
+| 测试 | `scripts/smoke.mjs`（Vite SSR + Node，83 项断言，无需浏览器） |
 
 ---
 
@@ -175,7 +175,7 @@ npm install
 npm run dev       # 开发服务器 http://localhost:5173
 npm run build     # 产物输出到 dist/
 npm run preview   # 本地预览构建产物 http://localhost:4173
-npm run smoke     # 冒烟测试（58 项断言，无浏览器依赖）
+npm run smoke     # 冒烟测试（83 项断言，无浏览器依赖）
 npm run verify    # build + smoke
 ```
 
@@ -299,7 +299,7 @@ npx serve dist        # 或任意静态服务器；预览时同样是相对路�
 ## 9. 测试
 
 ```bash
-npm run smoke                  # 离线：58 项断言
+npm run smoke                  # 离线：83 项断言
 SMOKE_NETWORK=1 npm run smoke  # 额外向 api.github.com 发 1 次请求，验证错误映射
 ```
 

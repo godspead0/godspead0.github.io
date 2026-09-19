@@ -122,13 +122,73 @@ try {
   const legacyFile = { path: '全栈/前端部分/Vue.md', sha: 'l1', size: legacyRaw.length }
   const legacy = notesSvc.parseNoteFile(legacyFile, legacyRaw)
   check('历史笔记：用文件夹名兜底为分类', legacy.category === '前端部分', legacy.category)
-  check('历史笔记：标题取正文首个标题', legacy.title === '**主题**：Vue 全家桶', legacy.title)
+  check('历史笔记：标题取正文首个标题（并清理 Markdown 标记）', legacy.title === '主题：Vue 全家桶', legacy.title)
   check('历史笔记：id 由路径稳定派生（多次解析一致）', !!legacy.id && legacy.id === notesSvc.parseNoteFile(legacyFile, legacyRaw).id, legacy.id)
   check('历史笔记：不同路径得到不同 id', legacy.id !== notesSvc.parseNoteFile({ path: '全栈/后端部分/Java.md', sha: 'l2' }, legacyRaw).id)
   check('历史笔记：判定为非托管命名（不跟随标题改名）', notesSvc.isManagedPath(legacyFile.path) === false)
   check('托管命名：全栈/{id}_{slug}.md 判定为 true', notesSvc.isManagedPath('全栈/1700000000000_Vue.md') === true)
   check('嵌套分类：全栈/后端部分/spring框架/SpringBoot.md 归类为 后端部分', notesSvc.categoryFromPath('全栈/后端部分/spring框架/SpringBoot.md') === '后端部分')
   check('笔记目录下的散装 .md 不产生分类', notesSvc.categoryFromPath('全栈/术语解释.md') === '')
+
+  // ---- 标题兜底：原先只认一级 "#"，导致 44/93 篇笔记显示「未命名笔记」 ----
+  const T = (body, path = '全栈/x.md') => notesSvc.parseNoteFile({ path, sha: 's' }, body).title
+  check('标题兜底：二级标题 ## 能识别', T('## 核心前提：先明确本质\n正文') === '核心前提：先明确本质')
+  check('标题兜底：四级标题 #### 能识别', T('#### Java性质\n正文') === 'Java性质')
+  check('标题兜底：HTML 标题 <h1> 能识别', T('<h1>redis集群</h1>\n正文') === 'redis集群')
+  check('标题兜底：跳过 [toc] 取真正的标题', T('[toc]\n\n# 真实标题\n正文') === '真实标题')
+  check('标题兜底：跳过独立的 "#" 取下一个标题', T('#\n## 次级标题\n正文') === '次级标题')
+  check('标题兜底：清理标题里的 Markdown 强调符', T('## **加粗**标题') === '加粗标题')
+  check('标题兜底：空文件用文件名（0 字节占位文件）', T('', '全栈/语言部分/Rust.md') === 'Rust')
+  check('标题兜底：空文件用文件名（中文）', T('   \n\n', '全栈/前端总结.md') === '前端总结')
+  check('标题兜底：文件名去掉托管 id 前缀', T('', '全栈/1758000000000_示例笔记.md') === '示例笔记')
+  check('标题兜底：文件名为空(.md)时用上级目录', T('', '全栈/一些个人理解/.md') === '一些个人理解')
+  check('标题兜底：文件名优先于正文首行猜测', T('大家在连接mysql的时候会警告你', '全栈/其他/网络部分.md') === '网络部分')
+  check('标题兜底：无文件名时才用正文首行', T('你在连接mysql时会收到警告', '') === '你在连接mysql时会收到警告')
+  check('标题兜底：正文首行的链接只保留文字', T('[Java：IO流详解](https://example.com/a)', '') === 'Java：IO流详解')
+  check('标题兜底：跳过代码围栏，取围栏后的正文首行', T('```plaintext\n代码\n```\n\n真正的第一行', '') === '真正的第一行')
+  check('标题兜底：围栏内的 # 注释不算标题', T('```bash\n# 这不是标题\n```\n\n## 这才是标题', '全栈/示例.md') === '这才是标题')
+  check('标题兜底：围栏未闭合时其后内容全部忽略', T('```plaintext\n# 看起来像标题', '全栈/占位.md') === '占位')
+  check('标题兜底：极端情况下才出现「未命名笔记」', T('', '') === '未命名笔记')
+
+  // ---- 跨刷新缓存（localStorage）：首屏秒开的数据来源 ----
+  const notesApi = (await load('/src/composables/useNotes.js')).useNotes()
+  const cachedNote = {
+    id: 'c1',
+    title: '缓存里的标题',
+    path: '全栈/缓存.md',
+    sha: 'sha-c1',
+    body: '缓存正文',
+    category: '前端部分',
+    tags: ['vue'],
+    created: '2026-09-01T00:00:00.000Z',
+    updated: '2026-09-01T00:00:00.000Z',
+  }
+  const putCache = (payload) => localStorage.setItem('notes-manager.notes.v1', JSON.stringify(payload))
+
+  localStorage.removeItem('notes-manager.notes.v1')
+  check('无缓存时 hydrateFromCache 返回 0', notesApi.hydrateFromCache() === 0)
+
+  putCache({ v: 1, savedAt: '2026-09-19T08:00:00.000Z', lite: false, notes: [cachedNote] })
+  const restored = notesApi.hydrateFromCache()
+  check('有缓存时恢复全部笔记', restored === 1 && notesApi.notes.value.length === 1, `恢复了 ${restored} 篇`)
+  check('恢复的笔记内容完整（含正文）', notesApi.notes.value[0]?.body === '缓存正文')
+  check('恢复后标记为「来自缓存」', notesApi.hydratedFromCache.value === true)
+
+  putCache({ v: 1, savedAt: 'x', lite: true, notes: [cachedNote] })
+  check('lite 精简缓存同样能恢复列表', notesApi.hydrateFromCache() === 1)
+
+  putCache({ v: 99, savedAt: 'x', notes: [cachedNote] })
+  notesApi.notes.value = []
+  check('版本不匹配的缓存被忽略', notesApi.hydrateFromCache() === 0)
+
+  localStorage.setItem('notes-manager.notes.v1', '{这不是合法 JSON')
+  notesApi.notes.value = []
+  check('损坏的缓存被安全忽略（不抛异常）', notesApi.hydrateFromCache() === 0)
+
+  notesApi.invalidateCache()
+  check('invalidateCache 同时清掉 localStorage', localStorage.getItem('notes-manager.notes.v1') === null)
+  notesApi.notes.value = []
+  notesApi.hydratedFromCache.value = false
 
   console.log('\n[2] 搜索 / 筛选 / 排序（Fuse.js）')
   const { useSearch } = await load('/src/composables/useSearch.js')

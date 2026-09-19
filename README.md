@@ -15,12 +15,12 @@ tech_doc/                              ← 站点仓库（公开）
 │  ├─ src/services/                    # GitHub API / 笔记模型 / Markdown / 导出
 │  ├─ src/composables/                 # 状态管理（笔记、打卡、分类、搜索、配置）
 │  ├─ src/components/                  # 界面组件（含 SVG 打卡热力图）
-│  └─ scripts/smoke.mjs                # 离线冒烟测试（58 项断言）
-├─ godspead0_understand/               # 私有笔记仓库的本地克隆（已被 .gitignore 排除）
-│  └─ 全栈/                            # ★ 你的笔记都在这里
-│     ├─ 前端部分/  后端部分/  中间件部分/  架构部分/  …
-│     ├─ 前端总结.md  后端总结.md  术语解释.md  …
-└─ 提交笔记.bat                         # 写完笔记后双击即可提交推送
+│  └─ scripts/smoke.mjs                # 离线冒烟测试（83 项断言）
+├─ 提交笔记.bat                         # 写完笔记后双击即可提交推送
+│                                      # 笔记仓库克隆位于站点目录之外：
+│                                      # D:\vscode_test_all\godspead0_understand\
+│                                      #   └─ 全栈/   ← ★ 你的笔记都在这里
+└─ .gitignore                          # 排除笔记仓库、构建产物、系统文件
 ```
 
 ## 日常使用：写笔记 → 提交

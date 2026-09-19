@@ -385,6 +385,49 @@ export async function listDir(path = '') {
 }
 
 /**
+ * 用 Git Trees API 一次性列出整棵子树的 .md 文件
+ * ---------------------------------------------------------------
+ * 逐层递归列目录需要「每个子目录 1 次请求」（当前 14 个子目录 = 15 次），
+ * Trees API 递归模式只要 1 次就能拿到全部路径与 sha。
+ * 返回 null 表示此接口不可用（无权限 / 网络失败 / 结果被截断），
+ * 调用方应回退到逐层递归，保证功能不退化。
+ * @param {string} dir
+ * @returns {Promise<Array|null>}
+ */
+async function listFilesViaTree(dir = '') {
+  const { owner, repo, branch } = currentConfig
+  const url = `${API_BASE}/repos/${encodeURIComponent(owner)}/${encodeURIComponent(
+    repo,
+  )}/git/trees/${encodeURIComponent(branch)}?recursive=1`
+
+  let data
+  try {
+    data = await request(url, {}, 30000)
+  } catch {
+    return null
+  }
+  // truncated=true 说明仓库太大被截断，此时结果不完整，宁可回退递归
+  if (!data || !Array.isArray(data.tree) || data.truncated) return null
+
+  const prefix = String(dir || '').replace(/^\/+|\/+$/g, '')
+  const files = []
+  for (const node of data.tree) {
+    if (node.type !== 'blob') continue
+    if (!/\.(md|markdown)$/i.test(node.path)) continue
+    if (prefix && !node.path.startsWith(`${prefix}/`)) continue
+    files.push({
+      name: node.path.slice(node.path.lastIndexOf('/') + 1),
+      path: node.path,
+      sha: node.sha,
+      size: node.size ?? 0,
+      type: 'file',
+      download_url: '',
+    })
+  }
+  return files
+}
+
+/**
  * 递归列出笔记目录下所有 .md 文件（含子目录）
  * 深度上限 6 层，避免异常结构导致请求爆炸。
  * @param {string} dir
@@ -393,6 +436,13 @@ export async function listDir(path = '') {
  */
 export async function listFiles(dir = '全栈', depth = 0) {
   if (depth > 6) return []
+
+  // 顶层优先走 Trees API（1 次请求），失败再逐层递归
+  if (depth === 0) {
+    const viaTree = await listFilesViaTree(dir)
+    if (viaTree) return viaTree
+  }
+
   const entries = await listDir(dir)
   const files = []
   const subdirs = []

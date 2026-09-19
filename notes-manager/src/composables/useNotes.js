@@ -39,6 +39,68 @@ const progress = ref({ done: 0, total: 0, label: '' })
 /** path -> { sha, note } 的本地缓存，避免重复下载 */
 const fileCache = new Map()
 
+/* ------------------------------------------------------------------ */
+/* 跨刷新缓存（localStorage）                                          */
+/* ------------------------------------------------------------------ */
+/**
+ * 笔记正文合计不到 1MB，完全可以放进 localStorage。
+ * 作用：打开网站时先用上次的笔记渲染首屏（几乎瞬间），
+ *       再在后台按 sha 校验差异 —— 内容没变的笔记连正文都不用重新下载。
+ */
+const CACHE_KEY = 'notes-manager.notes.v1'
+const CACHE_VERSION = 1
+/** 上次从本地缓存渲染的时间 */
+const cachedAt = ref('')
+
+/**
+ * 从 localStorage 恢复笔记并预热 sha 缓存
+ * @returns {number} 恢复的笔记条数（0 表示没有可用缓存）
+ */
+function hydrateFromCache() {
+  try {
+    const raw = localStorage.getItem(CACHE_KEY)
+    if (!raw) return 0
+    const data = JSON.parse(raw)
+    if (!data || data.v !== CACHE_VERSION || !Array.isArray(data.notes)) return 0
+    const list = data.notes.filter((n) => n && typeof n.path === 'string')
+    if (!list.length) return 0
+
+    notes.value = list
+    cachedAt.value = data.savedAt || ''
+    lastSyncAt.value = data.savedAt || ''
+    hydratedFromCache.value = true
+
+    // 关键：用缓存的 sha 预热 fileCache，
+    // 这样远端 sha 未变的笔记会被直接复用，不产生正文请求。
+    if (!data.lite) {
+      for (const n of list) {
+        if (n.path && n.sha) fileCache.set(n.path, { sha: n.sha, note: n })
+      }
+    }
+    return list.length
+  } catch {
+    return 0 // 缓存损坏时静默忽略，走正常网络加载
+  }
+}
+
+/** 把当前笔记写入 localStorage；空间不足时退化为不含正文的精简版 */
+function persistCache() {
+  const build = (list, lite) =>
+    JSON.stringify({ v: CACHE_VERSION, savedAt: new Date().toISOString(), lite, notes: list })
+  try {
+    localStorage.setItem(CACHE_KEY, build(notes.value, false))
+  } catch {
+    try {
+      localStorage.setItem(CACHE_KEY, build(notes.value.map((n) => ({ ...n, body: '' })), true))
+    } catch {
+      /* 实在放不下就放弃缓存，不影响主流程 */
+    }
+  }
+}
+
+/** 首屏内容是否来自本地缓存（同步完成后置回 false） */
+const hydratedFromCache = ref(false)
+
 const noteCount = computed(() => notes.value.length)
 const totalWords = computed(() => notes.value.reduce((sum, n) => sum + countWords(n.body), 0))
 
@@ -93,7 +155,9 @@ async function loadAll(opts = {}) {
     })
 
     notes.value = parsed.filter(Boolean)
+    hydratedFromCache.value = false
     lastSyncAt.value = new Date().toISOString()
+    persistCache()
     if (!opts.silent) toast.success(`已同步 ${notes.value.length} 篇笔记`)
   } catch (err) {
     const message = err instanceof GithubError ? err.message : err?.message || '拉取笔记失败'
@@ -122,6 +186,7 @@ async function create(draft) {
     note.sha = sha
     notes.value = [note, ...notes.value]
     fileCache.set(note.path, { sha, note })
+    persistCache()
     toast.success(`已创建：${note.title}`)
     return note
   } catch (err) {
@@ -167,6 +232,7 @@ async function update(note) {
     const idx = notes.value.findIndex((n) => n.id === updated.id)
     if (idx >= 0) notes.value.splice(idx, 1, updated)
     fileCache.set(nextPath, { sha, note: updated })
+    persistCache()
     toast.success(`已保存：${updated.title}`)
     return updated
   } catch (err) {
@@ -189,6 +255,7 @@ async function remove(note) {
     await deleteFile(note.path, note.sha, `delete: ${note.title}`)
     notes.value = notes.value.filter((n) => n.id !== note.id)
     fileCache.delete(note.path)
+    persistCache()
     toast.success(`已删除：${note.title}`)
     return true
   } catch (err) {
@@ -243,6 +310,7 @@ async function uploadLocal(files, opts = {}) {
         progress.value = { ...progress.value, done: progress.value.done + 1 }
       }
     }
+    if (ok) persistCache()
     if (ok) toast.success(`成功导入 ${ok} 篇笔记${failed ? `，${failed} 篇失败` : ''}`)
     return { ok, failed }
   } finally {
@@ -251,9 +319,16 @@ async function uploadLocal(files, opts = {}) {
   }
 }
 
-/** 清空本地缓存，强制下次全量下载 */
+/** 清空本地缓存（内存 + localStorage），强制下次全量下载 */
 function invalidateCache() {
   fileCache.clear()
+  cachedAt.value = ''
+  hydratedFromCache.value = false
+  try {
+    localStorage.removeItem(CACHE_KEY)
+  } catch {
+    /* 存储不可用时无需清理 */
+  }
 }
 
 /** 按 id 取笔记 */
@@ -269,9 +344,12 @@ export function useNotes() {
     progress,
     lastSyncAt,
     loadError,
+    cachedAt,
+    hydratedFromCache,
     noteCount,
     totalWords,
     loadAll,
+    hydrateFromCache,
     create,
     update,
     remove,

@@ -6,7 +6,7 @@
  *   slug  : 标题转写，保留中文；仅剔除文件系统非法字符
  */
 
-import { parseFrontmatter, stringifyFrontmatter, extractTitleFromBody } from './frontmatter.js'
+import { extractLeadLine, extractTitleFromBody, parseFrontmatter, stringifyFrontmatter } from './frontmatter.js'
 
 export const NOTES_DIR = '全栈'
 
@@ -75,6 +75,26 @@ export function categoryFromPath(path) {
 }
 
 /**
+ * 由文件名兜底推断标题。
+ * 你的笔记里有不少 0 字节的占位文件（如 前端总结.md、其他/Git.md），
+ * 它们没有正文可提取标题 —— 用文件名当标题远比「未命名笔记」有意义。
+ * 例：全栈/语言部分/Rust.md        -> Rust
+ *     全栈/1758000000000_示例-标题.md -> 示例-标题（去掉 id 前缀）
+ *     全栈/一些个人理解/.md          -> 一些个人理解（文件名不可用时退回上级目录）
+ */
+export function titleFromPath(path) {
+  const parts = String(path || '').split('/').filter(Boolean)
+  const file = parts.pop() || ''
+  const base = file
+    .replace(/\.(md|markdown)$/i, '')
+    .replace(/^\d{8,}[_-]/, '') // 去掉 SPA 托管命名的 id 前缀
+    .replace(/_+/g, ' ')
+    .trim()
+  if (base) return base
+  return parts.filter((p) => p !== NOTES_DIR).pop() || ''
+}
+
+/**
  * 规范化标签数组
  */
 export function normalizeTags(input) {
@@ -105,7 +125,14 @@ export function createNote(input = {}) {
   const now = new Date().toISOString()
   const body = String(input.body ?? '')
   const meta = input.meta || {}
-  const title = input.title || meta.title || extractTitleFromBody(body) || '未命名笔记'
+  // 标题优先级：显式标题 → 正文标题 → 文件名 → 正文首行
+  const title =
+    input.title ||
+    meta.title ||
+    extractTitleFromBody(body) ||
+    titleFromPath(input.path) ||
+    extractLeadLine(body) ||
+    '未命名笔记'
 
   return {
     id: String(input.id || meta.id || genId()),
@@ -132,7 +159,7 @@ export function parseNoteFile(file, raw) {
   const path = file?.path || ''
   return createNote({
     id: meta.id || idFromPath(path) || stableId(path),
-    title: meta.title || extractTitleFromBody(body),
+    title: meta.title || extractTitleFromBody(body) || titleFromPath(path) || extractLeadLine(body),
     // 历史笔记没有 frontmatter，用目录名兜底为分类
     category: meta.category || categoryFromPath(path),
     tags: meta.tags,
