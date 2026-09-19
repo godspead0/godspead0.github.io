@@ -432,6 +432,7 @@ export async function saveFile(path, content, sha, message, vault = null) {
     body: JSON.stringify(body),
   }, DEFAULT_TIMEOUT, cfg)
 
+  invalidateTree(cfg)
   return { sha: data?.content?.sha || '', commit: data?.commit?.sha || '' }
 }
 
@@ -453,6 +454,7 @@ export async function deleteFile(path, sha, message, vault = null) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   }, DEFAULT_TIMEOUT, cfg)
+  invalidateTree(cfg)
   return true
 }
 
@@ -491,20 +493,43 @@ export async function listDir(path = '', vault = null) {
  * @param {string} dir
  * @returns {Promise<Array|null>}
  */
+/**
+ * 文件树缓存。
+ * ---------------------------------------------------------------
+ * 技术/算法两个页签通常指向**同一个仓库**的不同子目录，
+ * 不缓存的话每次加载要把同一棵树取两遍。匿名访客每小时只有 60 次 API 额度，
+ * 所以这里按 owner/repo@branch 缓存整棵树，只对「成功且未截断」的结果生效。
+ */
+const treeCache = new Map()
+const TREE_TTL = 60 * 1000
+
+/** 写/删文件后立刻失效该仓库的文件树缓存，否则新笔记要等 1 分钟才出现 */
+function invalidateTree(cfg) {
+  treeCache.delete(`${cfg.owner}/${cfg.repo}@${cfg.branch}`)
+}
+
 async function listFilesViaTree(dir = '', vault = null) {
   const cfg = resolveConfig(vault)
-  const url = `${API_BASE}/repos/${encodeURIComponent(cfg.owner)}/${encodeURIComponent(
-    cfg.repo,
-  )}/git/trees/${encodeURIComponent(cfg.branch)}?recursive=1`
+  const key = `${cfg.owner}/${cfg.repo}@${cfg.branch}`
 
-  let data
-  try {
-    data = await request(url, {}, 30000, cfg)
-  } catch {
-    return null
+  let data = null
+  const hit = treeCache.get(key)
+  if (hit && Date.now() - hit.at < TREE_TTL) data = hit.tree
+
+  if (!data) {
+    const url = `${API_BASE}/repos/${encodeURIComponent(cfg.owner)}/${encodeURIComponent(
+      cfg.repo,
+    )}/git/trees/${encodeURIComponent(cfg.branch)}?recursive=1`
+
+    try {
+      data = await request(url, {}, 30000, cfg)
+    } catch {
+      return null
+    }
+    // truncated=true 说明仓库太大被截断，此时结果不完整，宁可回退递归
+    if (!data || !Array.isArray(data.tree) || data.truncated) return null
+    treeCache.set(key, { at: Date.now(), tree: data })
   }
-  // truncated=true 说明仓库太大被截断，此时结果不完整，宁可回退递归
-  if (!data || !Array.isArray(data.tree) || data.truncated) return null
 
   const prefix = String(dir || '').replace(/^\/+|\/+$/g, '')
   const files = []

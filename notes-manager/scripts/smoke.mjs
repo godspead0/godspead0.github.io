@@ -356,6 +356,51 @@ try {
   }
   check('只读模式下删文件被拒绝', roDel && roDel.code === 'NO_TOKEN')
 
+  /* 文件树缓存：技术/算法两个页签通常指向同一个仓库，
+     不缓存就会把同一棵树取两遍 —— 匿名访客每小时只有 60 次 API 额度，白白翻倍。
+     这里桩掉 fetch 计数验证。用独立的 owner/repo，避免被其它用例的缓存串味。 */
+  const realFetch = globalThis.fetch
+  let treeCalls = 0
+  let bodyCalls = 0
+  let bodyUrl = ''
+  globalThis.fetch = async (url) => {
+    const u = String(url)
+    if (u.includes('/git/trees/')) {
+      treeCalls++
+      return new Response(
+        JSON.stringify({
+          truncated: false,
+          tree: [{ type: 'blob', path: 'notes/a.md', sha: 'sha-a', size: 3 }],
+        }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
+      )
+    }
+    bodyCalls++
+    bodyUrl = u
+    return new Response('正文', { status: 200 })
+  }
+  try {
+    const cacheVault = { id: 'tmp', label: '临时', owner: 'tree-cache-test', repo: 'repo', branch: 'main', token: '', notesDir: '' }
+    const first = await ghMod.listFiles('', 0, cacheVault)
+    const second = await ghMod.listFiles('', 0, cacheVault)
+    check('Trees API 能列出文件', Array.isArray(first) && first.length === 1)
+    check('同一仓库的文件树只请求一次（命中缓存）', treeCalls === 1, `实际 ${treeCalls} 次`)
+    check('第二次调用仍返回相同结果', Array.isArray(second) && second.length === 1)
+
+    /* 匿名（无 Token）读正文必须走 raw CDN —— 走 Contents API 会算进 60 次/小时额度。
+       只数请求次数不够：两种路径都是"非树请求"，所以这里要断言 URL 本身。 */
+    const got = await ghMod.getFile('notes/a.md', cacheVault)
+    check('匿名读正文能取到内容', got && got.content === '正文')
+    check(
+      '匿名读正文走的是 raw CDN 而非 Contents API',
+      bodyUrl.startsWith('https://raw.githubusercontent.com/'),
+      `实际 ${bodyUrl.slice(0, 60)}`,
+    )
+    check('匿名读正文没有触碰 api.github.com', !bodyUrl.includes('api.github.com'))
+  } finally {
+    globalThis.fetch = realFetch
+  }
+
   /* 配置弹窗默认不弹出；手动打开后仍应有技术/算法两个页签 */
   ws.config.openModal()
   html = await renderApp()

@@ -8,22 +8,24 @@ cd /d "%~dp0"
 set "ROOT=%~dp0"
 
 rem ==================== 笔记仓库（与站点目录同级，不在站点仓库内部）====================
+rem 远端统一用 SSH：本机 github.com:443 常被拦，而 ~/.ssh/config 已把 github.com
+rem 映射到 ssh.github.com:443（GitHub 官方备用入口），走 SSH 稳定得多。
 rem 技术笔记：笔记位于 全栈/ 目录
 set "TECH_DIR=D:\vscode_test_all\godspead0_understand"
-set "TECH_REMOTE=https://github.com/godspead0/godspead0_understand.git"
+set "TECH_REMOTE=git@github.com:godspead0/godspead0_understand.git"
 set "TECH_BRANCH=master"
 set "TECH_LABEL=技术笔记"
 
 rem 算法笔记：笔记直接位于仓库根目录
 set "ALGO_DIR=D:\vscode_test_all\test_algorithm"
-set "ALGO_REMOTE=https://github.com/godspead0/godspead0_algorithm.git"
+set "ALGO_REMOTE=git@github.com:godspead0/godspead0_algorithm.git"
 set "ALGO_BRANCH=main"
 set "ALGO_LABEL=算法笔记"
 
 rem ==================== 公开展示仓库（网站对所有人展示的就是它）====================
 rem 这个仓库是 public 的，只放 .md 笔记副本；私有工作区里的 .cpp / origin/ 等不会进来。
 set "PUBLIC_DIR=D:\vscode_test_all\notes_public"
-set "PUBLIC_REMOTE=https://github.com/godspead0/godspead0_notes1.git"
+set "PUBLIC_REMOTE=git@github.com:godspead0/godspead0_notes1.git"
 set "PUBLIC_BRANCH=main"
 rem 公开仓库内的子目录名（技术笔记从 全栈/ 复制过去，算法笔记从根目录复制到 算法/）
 set "PUBLIC_TECH_SUB=全栈"
@@ -145,14 +147,20 @@ git commit -q -m "站点更新 %date%"
 if errorlevel 1 goto :fail
 
 echo       正在推送站点源码 ...
-git push -u origin main
-if not errorlevel 1 goto :site_ok
-rem 直连 github.com:443 有时会被拦，回退走本机代理
-echo       直连失败，尝试通过本机代理 127.0.0.1:7892 推送 ...
-git -c http.proxy=http://127.0.0.1:7892 push -u origin main
-if errorlevel 1 goto :site_push_fail
+rem 远端是 SSH（见文件开头的说明），偶尔会抖，重试几次
+set "PUSH_OK="
+for /l %%i in (1,1,5) do (
+  if not defined PUSH_OK (
+    git push origin main
+    if not errorlevel 1 set "PUSH_OK=1"
+    if not defined PUSH_OK (
+      echo       第 %%i 次失败，8 秒后重试 ...
+      timeout /t 8 /nobreak >nul
+    )
+  )
+)
+if not defined PUSH_OK goto :site_push_fail
 
-:site_ok
 echo       [完成] 站点源码已推送，1-2 分钟后网站自动更新。
 goto :end
 

@@ -2,19 +2,25 @@
 
 部署在 **GitHub Pages**（`https://godspead0.github.io`）的**个人在线笔记收纳与打卡系统**。
 
-核心机制：**纯前端 SPA + GitHub REST API**。网站没有自建后端，浏览器直接使用你自己填写的
-Personal Access Token（PAT）调用 GitHub Contents API，把 Markdown 笔记、打卡记录、
-分类元数据**双向同步**到你指定的数据仓库。
+核心机制：**纯前端 SPA + GitHub REST API**。网站没有自建后端，浏览器直连 GitHub ——
+**有 Token 时**用 Contents API 双向同步笔记、打卡与分类元数据；
+**没有 Token 时**（访客）改走 `raw.githubusercontent.com` 匿名只读，
+正文读取不计入 API 额度，且写操作在服务层就被拦下。
 
 - 站点源码：本仓库 `your-name/godspead0.github.io`（用户站点仓库，发布在**站点根路径**）
 - 访问地址：`https://godspead0.github.io/`
-- 数据仓库示例：`https://github.com/your-name/my-tech-notes`（技术笔记，私有）
+- 公开展示仓库：`godspead0_notes1`（**公开**，网站对所有人展示的就是它：`全栈/` + `算法/`）
+- 私有工作区（占位符）：`https://github.com/your-name/my-tech-notes`（技术笔记，私有）
   与 `https://github.com/your-name/my-algo-notes`（算法笔记，私有）
 
 > **关于占位符**：`your-name` / `my-tech-notes` / `my-algo-notes` / `my-algo-notes-dir`
-> 都是**占位符，不是真实仓库名**。站点是公开的，因此代码里刻意**不预填**
-> Owner / Repo / Branch / 笔记目录 —— 这些默认值会显示给任何访客。
-> 真实值只存在于浏览器 `localStorage`，每台设备首次配置时手动填一次。
+> 都是**占位符，不是真实仓库名** —— 公开仓库的文档不写私有仓库名。
+> 公开展示仓库 `godspead0_notes1` 本身就是公开的，所以直接写出来：
+> 它必须公开，否则访客读不到内容。
+
+> **只读模式**：站点代码里预填了公开展示仓库，因此访客**无需任何配置**即可浏览；
+> 顶栏会显示「只读」徽标，新建 / 导入 / 打卡按钮禁用。
+> 填上 Token 才切换为可写模式。
 
 > Vite 已配置 `base: './'`（相对路径），因此无论发布在根路径还是 `/<repo>/` 子路径下都能正常加载资源。
 
@@ -53,7 +59,7 @@ Personal Access Token（PAT）调用 GitHub Contents API，把 Markdown 笔记�
 | Markdown | marked 12（解析）+ DOMPurify 3（XSS 消毒，fail-closed） |
 | 导出 | `FileReader`（读取本地文件）/ `Blob`（单篇下载）/ JSZip（全站打包） |
 | 本地缓存 | `localStorage`（凭据、主题、打卡记录预热缓存） |
-| 测试 | `scripts/smoke.mjs`（Vite SSR + Node，113 项断言，无需浏览器） |
+| 测试 | `scripts/smoke.mjs`（Vite SSR + Node，131 项断言，无需浏览器） |
 
 ---
 
@@ -118,25 +124,40 @@ notes-manager/
 ## 4. 数据仓库结构
 
 笔记数据存放在**站点源码仓库之外的独立仓库**里，网站支持**多个仓库聚合**（vault），
-每个仓库在「连接设置」里有独立页签：
+每个仓库在「连接设置」里有独立页签。默认的两个页签指向**同一个公开展示仓库**的不同子目录：
 
-| 页签 | 仓库 | 默认分支 | 笔记目录 |
+| 页签 | 仓库 | 分支 | 笔记目录 |
 | --- | --- | --- | --- |
-| 技术 | `my-tech-notes`（私有） | `master` | `全栈/` |
-| 算法 | `my-algo-notes`（私有） | `main` | 仓库根目录 |
+| 技术 | `godspead0_notes1`（公开） | `main` | `全栈/` |
+| 算法 | `godspead0_notes1`（公开） | `main` | `算法/` |
+
+> 两个页签指向同一仓库时，**文件树只请求一次**（按 `owner/repo@branch` 缓存 60 秒），
+> 因为匿名访客每小时只有 60 次 API 额度。
 
 网站里 **一级分类 = 仓库（技术 / 算法）**，二级才是分类文件夹。
 
 ```text
-my-tech-notes/          # 技术笔记 · 默认分支 master
-├── 全栈/                      # ★ 笔记根目录（只扫描这里）
+godspead0_notes1/             # 公开展示仓库（public）· 网站展示的就是它
+├── 全栈/                      # ★ 技术笔记根目录（页签「技术」只扫描这里）
 │   ├── 前端部分/Vue.md        # 按分类建文件夹，文件夹名 = 笔记分类
 │   ├── 后端部分/spring框架/SpringBoot.md
 │   ├── 术语解释.md            # 散落在 全栈/ 下的单篇笔记（无分类）
 │   └── {id}_{slug}.md         # 在网站里新建的笔记（带 frontmatter）
+├── 算法/                      # ★ 算法笔记根目录（页签「算法」只扫描这里）
 ├── checkins.json              # { "YYYY-MM-DD": count, ... }（自动创建，主仓库根目录）
-├── categories.json            # 分类与标签元数据（自动创建，主仓库根目录）
-└── origin/                    # 该仓库里的其它内容（代码 .cpp / 图片等），不读取
+└── categories.json            # 分类与标签元数据（自动创建，主仓库根目录）
+```
+
+镜像来源是私有工作区，`origin/` 里的代码 / 图片不会被复制过去：
+
+```text
+my-tech-notes/          # 私有工作区 · 默认分支 master
+└── 全栈/                      # ★ 唯一的镜像来源（只复制 .md）
+    └── ...
+
+my-algo-notes/          # 私有工作区 · 默认分支 main
+└── ...                        # 根目录下的 .md → 镜像到公开仓库的 算法/
+```
 
 my-algo-notes-dir/                # 算法笔记 · 默认分支 main
 ├── 力扣/ 洛谷/ 牛客/ ...      # ★ 笔记与题解（文件夹名 = 笔记分类）
@@ -180,14 +201,19 @@ updated: "2026-09-02T03:30:00.000Z"
 
 ### 4.3 快速初始化数据仓库
 
-1. 在 GitHub 上创建或使用已有的笔记仓库（例如 `your-name/my-tech-notes`），私有/公开皆可；
-2. 把 `examples/data-repo/` 下的三个示例文件上传进去（可选，不传也能用）；
-3. 在弹窗的「技术」页签填 `master`、「算法」页签填 `main`（各自仓库的默认分支）。
+1. 在 GitHub 上创建一个**公开**的笔记仓库（本站用 `godspead0_notes1`）——
+   **必须公开**，否则匿名访客读不到；把 `examples/data-repo/` 下的示例文件传进去（可选，不传也能用）；
+2. 在 `src/composables/useConfig.js` 里把 `PUBLIC_OWNER` / `PUBLIC_REPO` / `PUBLIC_BRANCH`
+   改成你的仓库，两个页签的 `notesDir` 分别是 `全栈` 与 `算法`；
+3. 普通访客到这里就结束了 —— 打开网站即可只读浏览；
+4. **要写入权限**（新建 / 编辑 / 删除 / 打卡）才需要 Token：
+   在「连接设置」两个页签的 Token 栏各粘贴一次，权限选 `Contents: Read and write`。
    网站内新建的笔记按当前所选仓库写入：
-   技术仓库 → <code class="font-mono">全栈/{id}_{slug}.md</code>；
-   算法仓库 → <code class="font-mono">{id}_{slug}.md</code>（根目录）。
-   你自己整理的历史笔记放在各自的笔记目录下的任意子文件夹里也能被读取。
-4. Token 在 Repository access 中**同时勾选两个仓库**，权限选 `Contents: Read and write`。
+   技术页签 → <code class="font-mono">全栈/{id}_{slug}.md</code>；
+   算法页签 → <code class="font-mono">算法/{id}_{slug}.md</code>。
+
+> 私有工作区（本机编辑用）通过 `提交笔记.bat` 的镜像步骤单向同步到公开仓库，
+> 网站**不直接读**私有仓库，因此访客只需要公开仓库的读取权限。
 
 ---
 
@@ -200,12 +226,13 @@ npm install
 npm run dev       # 开发服务器 http://localhost:5173
 npm run build     # 产物输出到 dist/
 npm run preview   # 本地预览构建产物 http://localhost:4173
-npm run smoke     # 冒烟测试（113 项断言，无浏览器依赖）
+npm run smoke     # 冒烟测试（131 项断言，无浏览器依赖）
 npm run verify    # build + smoke
 ```
 
-首次打开会**自动弹出连接设置弹窗**，在「技术 / 算法」两个页签分别填写
-Owner / Repo / Branch / 笔记目录 / Token，各自点「测试并保存」。
+打开网站即可**只读浏览**（站点代码已预填公开展示仓库，访客无需任何配置）。
+要写入时点右上角「连接设置」，在「技术 / 算法」两个页签的 **Token** 栏各粘贴一次
+（Owner / Repo / Branch / 笔记目录 已预填、保持不动），各自点「测试并保存」。
 
 ---
 
@@ -214,11 +241,15 @@ Owner / Repo / Branch / 笔记目录 / Token，各自点「测试并保存」。
 **Token 只保存在当前浏览器的 `localStorage`**，请求直连 `api.github.com`，不经过任何第三方服务器。
 但浏览器端的 PAT 仍是敏感信息，务必遵守：
 
-- 优先使用 **Fine-grained token**：`Repository access` 只勾选数据仓库，
+- 优先使用 **Fine-grained token**：`Repository access` 只勾选**公开展示仓库**，
   权限只给 **Contents: Read and write**（`Metadata: Read` 会自动附带）；
-- 老式经典 Token 需要 `repo` 作用域（私有仓库）；
+  网站不读私有工作区，因此**不必**授权那些仓库；
+- 老式经典 Token 需要 `repo` 作用域；
 - **不要在公共电脑上使用**；用完点「清除凭据」，或直接使用浏览器的访客模式；
 - Token 泄露后立即到 GitHub Settings 吊销。
+
+> **访客没有 Token**，因此写操作在服务层就被拒绝（`saveFile` / `deleteFile` 会抛
+> `NO_TOKEN`「当前是只读模式」），前端禁用按钮只是提示，不是唯一防线。
 
 ### 6.1 本机缓存与「清除凭据」
 
@@ -229,7 +260,7 @@ Owner / Repo / Branch / 笔记目录 / Token，各自点「测试并保存」。
 
 | localStorage 键 | 内容 |
 | --- | --- |
-| `notes-manager.vaults.v2` | 各仓库配置（含 Token） |
+| `notes-manager.vaults.v3` | 各仓库配置（含 Token） |
 | `notes-manager.config.v1` | 旧版扁平配置（含 Token，兼容保留） |
 | `notes-manager.notes.v1` | **笔记列表与正文** |
 | `notes-manager.checkins.cache` | 打卡记录预热缓存 |
@@ -349,7 +380,7 @@ npx serve dist        # 或任意静态服务器；预览时同样是相对路�
 ## 9. 测试
 
 ```bash
-npm run smoke                  # 离线：113 项断言
+npm run smoke                  # 离线：131 项断言
 SMOKE_NETWORK=1 npm run smoke  # 额外向 api.github.com 发 1 次请求，验证错误映射
 ```
 
@@ -379,7 +410,7 @@ SMOKE_NETWORK=1 npm run smoke  # 额外向 api.github.com 发 1 次请求，验�
 | 中文变成乱码 | 不应发生（已做 UTF-8 安全编解码）；若出现请提 issue 并附上笔记原文 |
 | 保存冲突 409 | 同一文件被别处修改；点「同步」拉取最新版本后重新编辑 |
 | 笔记数量对不上 | 技术仓库只统计 `全栈/` 下的 `.md` / `.markdown`，算法仓库统计根目录及子目录；两个仓库的代码等其它文件都不会被读取 |
-| 某个仓库的笔记没出现 | 该仓库页签的 Token 未填 / 填错；在「连接设置」对应页签点「测试并保存」确认可写 |
+| 某个仓库的笔记没出现 | 该页签的 Owner / Repo / Branch 拼写；公开展示仓库是否为 public；Token 无效时只读仍应能读到内容 |
 | 单文件读取失败 | Contents API 对 >1MB 文件不返回内容，前端会自动改走 `download_url` raw 通道 |
 | 换电脑后需要重新配置 | 凭据存在浏览器本地，不同设备/浏览器互不同步（安全设计，而非缺陷） |
 
